@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.0"?>
+<plugin
+   id="org.infoglue.igide.InfoglueConnectorPlugin"
+   name="Infoglue Connector Plug-in"
+   version="1.0.0"
+   provider-name="Infoglue Community"
+   class="org.infoglue.igide.InfoglueConnectorPlugin">
+
+   <runtime>
+      <library name="igconnector.jar">
+         <export name="*"/>
+      </library>
+      <library name="dom4j-1.4.jar">
+         <export name="*"/>
+      </library>
+      <library name="xercesImpl.jar">
+         <export name="*"/>
+      </library>
+      <library name="velocityui.jar">
+         <export name="*"/>
+      </library>
+      <library name="jtopas-core.jar">
+         <export name="*"/>
+      </library>
+      <library name="xml-apis.jar">
+         <export name="*"/>
+      </library>
+   </runtime>
+
+   <requires>
+      <import plugin="org.eclipse.ui"/>
+      <import plugin="org.eclipse.core.runtime"/>
+      <import plugin="org.eclipse.ui.editors"/>
+      <import plugin="org.eclipse.ui.workbench.texteditor"/>
+      <import plugin="org.eclipse.core.resources"/>
+      <import plugin="org.eclipse.ui.ide"/>
+      <import plugin="org.eclipse.ui.forms"/>
+   </requires>
+
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            name="Infoglue Development"
+            id="infoglue">
+      </category>
+      <view
+            allowMultiple="false"
+            class="org.infoglue.igide.view.ContentExplorerView"
+            icon="icons/contentRoot.gif"
+            category="infoglue"
+            name="Infoglue Content Explorer"
+            id="org.infoglue.igide.view.ContentExplorerView">
+      </view>
+   </extension>
+   <extension
+         point="org.eclipse.ui.perspectiveExtensions">
+      <perspectiveExtension
+            targetID="org.eclipse.ui.resourcePerspective">
+         <view
+               closeable="true"
+               id="org.infoglue.igide.view.ContentExplorerView"
+               moveable="true"
+               ratio="0.5"
+               relationship="stack"
+               relative="org.eclipse.ui.views.ResourceNavigator"
+               showTitle="true"
+               standalone="true"
+               visible="true">
+         </view>
+      </perspectiveExtension>
+   </extension>
+   <extension
+         point="org.eclipse.ui.editors">
+      <editor
+            class="org.infoglue.igide.editor.IGMultiPageEditor"
+            icon="icons/file.gif"
+            default="false"
+            contributorClass="org.infoglue.igide.editor.IGMultiPageEditorContributor"
+            name="org.infoglue.igide.editor.IGMultiPageEditor"
+            id="org.infoglue.igide.editor.IGMultiPageEditor"/>
+      <editor
+            icon="icons/file.gif"
+            class="org.infoglue.igide.editor.InfoglueFormEditor"
+            default="false"
+            name="org.infoglue.igide.editor.InfoglueFormEditor"
+            id="org.infoglue.igide.editor.InfoglueFormEditor"/>
+   </extension>
+   <extension
+         point="org.eclipse.ui.elementFactories">
+      <factory
+            class="org.infoglue.igide.editor.InfoglueEditorInputFactory"
+            id="org.infoglue.igide.editor.InfoglueEditorInputFactory"/>
+   </extension>
+   <extension point="org.eclipse.ui.preferencePages">
+      <page class="org.infoglue.igide.preferences.InfogluePreferenceContainer"
+            name="Infoglue"
+            id="org.infoglue.igide.preferences.InfogluePreferenceContainer"/>
+            
+      <page class="org.infoglue.igide.preferences.InfogluePreferencePage"
+            name="Content Explorer"
+            category="org.infoglue.igide.preferences.InfogluePreferenceContainer"
+            id="org.infoglue.igide.preferences.InfogluePreferencePage"/>
+   </extension>
+   <extension
+         point="org.eclipse.wst.common.project.facet.core.facets">
+      <project-facet
+            id="igc.web">
+         <label>
+            Infoglue JSP Based project
+         </label>
+         <description>
+            Enables code complete in the infoglue connector plugin. Not for general use
+         </description>
+      </project-facet>
+      <project-facet-version
+            facet="igc.web"
+            version="1.0">
+         <action
+               type="install">
+            <delegate
+                  class="org.infoglue.igide.facets.IGFacetInstallAction">
+            </delegate>
+         </action>
+         <constraint>
+            <requires
+                  facet="jst.web"
+                  version="2.2,2.3,2.4">
+            </requires>
+         </constraint>
+      </project-facet-version>
+   </extension>
+
+</plugin>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry exported="true" kind="lib" path="bin" sourcepath="bin"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/infoglue-2.5.jar" sourcepath="/infoglue"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/xstream-1.2.2.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/commons-httpclient-3.1.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/commons-codec-1.3.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/commons-logging.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/commons-logging-api.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/log4j-1.2.15.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/dom4j-1.4.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/domtags.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/jstl.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/jtopas-core.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/servlet-api.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/standard.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/taglibs-mailer.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/xercesImpl.jar"/>
+	<classpathentry exported="true" kind="lib" path="res/lib/xml-apis.jar"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.pde.core.requiredPlugins"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

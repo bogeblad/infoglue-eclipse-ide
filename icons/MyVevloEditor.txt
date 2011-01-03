@@ -1,0 +1,51 @@
+/* 
+ * Created on 2005-apr-18
+ *
+ */
+package org.infoglue.igide.editor.velocity;
+
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.vaulttec.velocity.ui.editor.VelocityDocumentProvider;
+import org.vaulttec.velocity.ui.editor.VelocityEditor;
+import org.vaulttec.velocity.ui.editor.VelocityEditorEnvironment;
+
+import org.infoglue.igide.editor.AttributeEditorInput;
+
+/**
+ * @author Stefan Sik
+ * 
+ */
+public class MyVeloEditor extends VelocityEditor
+{
+    public void doSave(IProgressMonitor progressMonitor)
+    {
+        System.out.println("DoSave in MyVeloEditor ..................................................");
+        getAttributeEditorInput().getAttribute().setValue(getDocument().get());
+        super.doSave(progressMonitor);
+    }
+
+    protected AttributeEditorInput getAttributeEditorInput()
+    {
+        return (AttributeEditorInput) getEditorInput();
+    }
+
+    protected void initializeEditor() 
+    {
+		super.initializeEditor();
+		VelocityEditorEnvironment.connect();
+		setDocumentProvider(new VelocityDocumentProvider());
+		setSourceViewerConfiguration(new MyVeloConfig(this));
+	}
+    /* (non-Javadoc)
+     * @see org.vaulttec.velocity.ui.editor.VelocityEditor#dispose()
+     */
+    public void dispose()
+    {
+        try {
+          getAttributeEditorInput().getAttribute().getFile().delete(true, false, null);  
+        }
+        catch(Exception e)
+        {}
+        super.dispose();
+    }
+}

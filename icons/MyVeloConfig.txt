@@ -1,0 +1,45 @@
+/* 
+ * Created on 2005-apr-19
+ *
+ */
+package org.infoglue.igide.editor.velocity;
+
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.contentassist.ContentAssistant;
+import org.eclipse.jface.text.contentassist.IContentAssistant;
+import org.eclipse.jface.text.source.ISourceViewer;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.widgets.Display;
+import org.vaulttec.velocity.ui.editor.VelocityConfiguration;
+import org.vaulttec.velocity.ui.editor.text.VelocityPartitionScanner;
+
+/**
+ * @author Stefan Sik
+ * 
+ */
+public class MyVeloConfig extends VelocityConfiguration
+{
+	private MyVeloEditor fEditor;
+
+    public MyVeloConfig(MyVeloEditor editor)
+    {
+        super(editor);
+        fEditor = editor;
+    }
+    
+	public IContentAssistant getContentAssistant(ISourceViewer aSourceViewer) {
+		ContentAssistant assistant = new ContentAssistant();
+		assistant.setContentAssistProcessor(
+							  new MyVelocityCompletionProcessor(fEditor, true),
+							  IDocument.DEFAULT_CONTENT_TYPE);
+		assistant.setContentAssistProcessor(
+							   new MyVelocityCompletionProcessor(fEditor, false),
+							   VelocityPartitionScanner.PARSED_STRING);
+		assistant.enableAutoInsert(true);
+		assistant.enableAutoActivation(true);
+		assistant.setProposalSelectorBackground(Display.getCurrent().getSystemColor(SWT.COLOR_LIST_BACKGROUND));
+		return assistant;
+		
+	}
+
+}
