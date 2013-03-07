@@ -23,7 +23,10 @@
 package org.infoglue.igide.model;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+
+import org.infoglue.igide.helper.Logger;
 
 
 /**
@@ -34,14 +37,13 @@ import java.util.List;
 public class MasterNode implements INode {
 
 	String id = "";
+	private List<ConnectedInfoglueNode> nodes = new ArrayList<ConnectedInfoglueNode>();
+	
 	public MasterNode(String id) 
 	{
 		this.id = id;
+        nodes = new ArrayList();
 	}
-	
-	private List<ConnectedInfoglueNode> nodes = new ArrayList<ConnectedInfoglueNode>();
-	
-	
 	
 	public boolean contains(ConnectedInfoglueNode o) {
 		return nodes.contains(o);
@@ -90,6 +92,23 @@ public class MasterNode implements INode {
 		}
 		return nodes.add(node);
 	}
+
+    public boolean removeIfNameContains(ConnectedInfoglueNode node)
+    {
+        for(Iterator connectedNodes = nodes.iterator(); connectedNodes.hasNext();)
+        {
+            ConnectedInfoglueNode connectedNode = (ConnectedInfoglueNode)connectedNodes.next();
+            Logger.logConsole((new StringBuilder("connectedNode:")).append(connectedNode.getName()).append(" - ").append(node.getName()).toString());
+            if(connectedNode.getName().equals(node.getName()))
+            {
+                Logger.logConsole("Removing node:" + connectedNode);
+                connectedNode.getConnection().onEndConnection(null);
+                return nodes.remove(connectedNode);
+            }
+        }
+
+        return false;
+    }
 
 	public INode getParentNode() {
 		return null;

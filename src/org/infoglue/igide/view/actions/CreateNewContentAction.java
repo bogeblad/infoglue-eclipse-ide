@@ -26,9 +26,11 @@ package org.infoglue.igide.view.actions;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.window.Window;
 import org.infoglue.igide.cms.ContentTypeDefinition;
 import org.infoglue.igide.cms.InfoglueCMS;
+import org.infoglue.igide.helper.Logger;
 import org.infoglue.igide.helper.Utils;
 import org.infoglue.igide.model.content.ContentNode;
 
@@ -41,13 +43,18 @@ public class CreateNewContentAction extends Action {
 
 	private ContentNode parentNode;
 	private ContentTypeDefinition definition;
-	public CreateNewContentAction(ContentNode parentNode, ContentTypeDefinition definition)
+	private TreeViewer viewer;
+	
+	public CreateNewContentAction(ContentNode parentNode, ContentTypeDefinition definition, TreeViewer viewer)
 	{
 		this.parentNode = parentNode;
 		this.definition = definition;
+		this.viewer = viewer;
 
+		//Logger.logConsole("name:" + getName());
 		setText(getName());
-		try {
+		try 
+		{
 			setImageDescriptor(getImage());
 		}
 		catch(Exception e)
@@ -57,7 +64,8 @@ public class CreateNewContentAction extends Action {
 
 	}
 	
-	private String getName() {
+	private String getName() 
+	{
 		return definition.getName().equals("HTMLTemplate") ? "Component (HTMLTemplate)": definition.getName();
 	}
 
@@ -105,13 +113,15 @@ public class CreateNewContentAction extends Action {
 		dialog.open();
 		if(dialog.getReturnCode()== Window.OK)
 		{
-			System.out.println("Will create content node");
+			Logger.logConsole("Will create content node");
 			String name = dialog.getValue();
-			InfoglueCMS.createContent(parentNode.getConnection(), parentNode.getId(), parentNode.getRepositoryId(), name, definition.getId());
+            InfoglueCMS.createContent(parentNode.getConnection(), parentNode.getId(), parentNode.getRepositoryId(), name, definition.getId(), false);
+			//InfoglueCMS.createContent(parentNode.getConnection(), parentNode.getId(), parentNode.getRepositoryId(), name, definition.getId());
+            viewer.refresh(Utils.getSelectedContentNode(viewer));
 		}
 		else
 		{
-			System.out.println("returncode: " + dialog.getReturnCode());
+			Logger.logConsole("returncode: " + dialog.getReturnCode());
 		}
 		// MessageDialog.openInformation(null,"Create new " + definition.getName(), "Create a new " + definition.getName() + " in folder " + parentNode.toString());
 		

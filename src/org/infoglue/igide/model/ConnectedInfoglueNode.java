@@ -26,6 +26,7 @@
  */
 package org.infoglue.igide.model;
 
+import java.net.URL;
 import org.eclipse.core.resources.IResource;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
 

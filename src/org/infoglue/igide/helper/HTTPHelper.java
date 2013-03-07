@@ -54,7 +54,7 @@ public class HTTPHelper
 		    
 		    URLConnection connection = url.openConnection();
 			connection.setConnectTimeout(3000);
-		    connection.setReadTimeout(10000);
+		    connection.setReadTimeout(20000);
 		    connection.setUseCaches(false);
 			InputStream inStream = null;
 		    inStream = connection.getInputStream();

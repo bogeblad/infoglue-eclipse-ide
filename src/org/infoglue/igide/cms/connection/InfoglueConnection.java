@@ -34,9 +34,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.NTCredentials;
+import org.apache.commons.httpclient.UsernamePasswordCredentials;
+import org.apache.commons.httpclient.auth.AuthScope;
+import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.swt.widgets.Display;
 import org.infoglue.igide.cms.exceptions.InvalidLoginException;
 import org.infoglue.igide.helper.HTTPHelper;
+import org.infoglue.igide.helper.Logger;
 import org.infoglue.igide.helper.NotificationListener;
 import org.infoglue.igide.helper.http.HTTPTextDocumentListenerEngine;
 import org.infoglue.igide.helper.http.TextDocumentListener;
@@ -65,6 +71,11 @@ public class InfoglueConnection implements TextDocumentListener
     public static final String NOTIFICATIONSERVICE 				= "SimpleContentXml!getChangeNotificationsStream.action";
     public static final String VIEWCONTENTVERSIONSTANDALONE 	= "ViewContentVersion!standalone.action";
 
+    public static final String ROOTCONTENTSERVICEACTION = "SimpleContentXml!RootContent.action";
+    public static final String MASTERLANGUAGESERVICEACTION = "SimpleContentXml!masterLanguage.action";
+    public static final String CREATEREPOSITORY = "CreateRepository!XML.action";
+    public static final String UPDATEACCESSRIGHTS = "UpdateAccessRights.action";
+
     // TODO: In Infoglue, create an xml view for CreateContent.action
     public static final String CREATECONTENT 					= "CreateContent.action";
 
@@ -78,21 +89,36 @@ public class InfoglueConnection implements TextDocumentListener
 
     private InfoglueProxy     infoglueProxy              = null;
     private boolean connected = false;
-    
+    private TreeViewer viewer;
+    private HttpClient client;
+
     private List<NotificationListener> notificationListeners = new ArrayList<NotificationListener>();
     private boolean listeningForNotifications = false;
     private boolean enableListenForNotifications = true;
 
-    public InfoglueConnection(String baseUrl, String username, String password)
+    public InfoglueConnection(String baseUrl, String username, String password, TreeViewer viewer) throws IllegalStateException
     {
-        System.out.println("Creating new connection: ");
-        System.out.println("BaseUrl: " + baseUrl);
-        System.out.println("UserName: " + username);
-        System.out.println("Password: " + password);
-
+        connected = false;
+        notificationListeners = new ArrayList();
+        listeningForNotifications = false;
+        enableListenForNotifications = true;
+        Logger.logConsole("Creating new connection: ");
+        Logger.logConsole((new StringBuilder("BaseUrl: ")).append(baseUrl).toString());
+        Logger.logConsole((new StringBuilder("UserName: ")).append(username).toString());
         setBaseUrl(baseUrl);
         this.username = username;
         this.password = password;
+        this.viewer = viewer;
+
+        try 
+        {
+			getInfoglueProxy().getContentTypeDefinitions();
+		}
+        catch (Exception e) 
+        {
+           	Logger.logConsole("Error getting content types on connection: " + e.getMessage());
+            throw new IllegalStateException("Could not initialize content types");
+   		}
     }
     
     private void setBaseUrl(String baseUrl)
@@ -151,7 +177,7 @@ public class InfoglueConnection implements TextDocumentListener
         if(!listeningForNotifications)
         {
     		listeningForNotifications = true;
-            new HTTPTextDocumentListenerEngine(this, getUrl(NOTIFICATIONSERVICE, "")).start();
+            (new HTTPTextDocumentListenerEngine(this, getUrl(NOTIFICATIONSERVICE, ""), getClient(), viewer)).start();
         }
     }
     
@@ -358,6 +384,7 @@ public class InfoglueConnection implements TextDocumentListener
 	}
 
 	public void onEndConnection(URL url) {
+		Logger.logConsole("onEndConnection");
 		listeningForNotifications = false;
 		setConnected(false);
         for(NotificationListener listener: notificationListeners)
@@ -372,4 +399,18 @@ public class InfoglueConnection implements TextDocumentListener
 	public boolean isConnected() {
 		return connected;
 	}
+	
+	public HttpClient getClient()
+    {
+        if(client == null)
+        {
+            client = new HttpClient();
+            org.apache.commons.httpclient.Credentials cred = new UsernamePasswordCredentials(username, password);
+            org.apache.commons.httpclient.Credentials ntcred = new NTCredentials(username, password, getBaseUrl().getHost(), "corp");
+            client.getParams().setAuthenticationPreemptive(true);
+            client.getState().setCredentials(new AuthScope(getBaseUrl().getHost(), getBaseUrl().getPort(), AuthScope.ANY_REALM), ntcred);
+            client.getHostConfiguration().setHost(getBaseUrl().getHost(), getBaseUrl().getPort());
+        }
+        return client;
+    }
 }

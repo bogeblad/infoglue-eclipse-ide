@@ -36,6 +36,7 @@ import org.infoglue.igide.cms.ContentTypeDefinition;
 import org.infoglue.igide.cms.InfoglueCMS;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
 import org.infoglue.igide.cms.connection.InfoglueProxy;
+import org.infoglue.igide.helper.Logger;
 import org.infoglue.igide.helper.Utils;
 import org.infoglue.igide.model.MasterNode;
 import org.infoglue.igide.preferences.PreferenceHelper;
@@ -59,7 +60,7 @@ public class ContentNodeFactory {
 	
 	public static ContentNode createContentNode(ContentNode parentNode, String id, String parent, String text,	String type, String src, Integer activeVersion, Integer repositoryId, Integer activeVersionStateId, Integer contentTypeId, String activeVersionModifier, boolean bHasChildren) 
 	{
-		System.out.println("createContentNode, type: "  + type);
+		Logger.logConsole("createContentNode, type: "  + type);
 		IResource 	parentResource = parentNode.getLocalrecource();
 		IFolder 	parentFolder = null;
 		IFile 		thisFile = null;
@@ -90,15 +91,15 @@ public class ContentNodeFactory {
 		 */
 		if(type.equalsIgnoreCase(ContentNode.ITEM))
 		{
-			System.out.println("============================================================");
-			System.out.println("Node is an item:");
+			Logger.logConsole("============================================================");
+			Logger.logConsole("Node is an item:");
 			InfoglueProxy proxy = parentNode.getConnection().getInfoglueProxy();
 			try 
 			{
 				ContentTypeDefinition def = proxy.getContentTypeDefinition(contentTypeId);
-				System.out.println("ContentType: " + def.getName());
+				Logger.logConsole("ContentType: " + def.getName());
 				Map<String, ContentTypeAttribute> attributes = InfoglueCMS.getContentTypeAttributes(def.getSchemaValue());
-				System.out.println("Attributes:");
+				Logger.logConsole("Attributes:");
 				
 				/*
 				 * Check if we have a primary attribute.
@@ -108,14 +109,14 @@ public class ContentNodeFactory {
 					String thisKey = def.getName() + "." + attributes.get(key).getName();
 					if(primaryAttributeKeys.contains(thisKey))
 					{
-						System.out.println(thisKey + " is a primary attribute key");
+						Logger.logConsole(thisKey + " is a primary attribute key");
 						thisFile = parentFolder.getFile(text.trim() + PreferenceHelper.getFileExtensionForAttributeKey(thisKey));
 						if(!thisFile.exists())
 						{
 						}
 						else
 						{
-							System.out.println(thisFile.toString() + " exists");
+							Logger.logConsole(thisFile.toString() + " exists");
 						}
 						// Use this file as the resource for this node.
 						thisResource = thisFile;
@@ -126,7 +127,7 @@ public class ContentNodeFactory {
 			{
 				e.printStackTrace();
 			}
-			System.out.println("============================================================");
+			Logger.logConsole("============================================================");
 		}
 
 		/*

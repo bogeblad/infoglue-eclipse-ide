@@ -32,6 +32,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.wst.common.project.facet.core.IFacetedProject;
 import org.eclipse.wst.common.project.facet.core.IProjectFacet;
+import org.eclipse.wst.common.project.facet.core.IProjectFacetVersion;
 import org.eclipse.wst.common.project.facet.core.ProjectFacetsManager;
 import org.infoglue.igide.model.content.ContentNode;
 
@@ -40,7 +41,8 @@ import org.infoglue.igide.model.content.ContentNode;
  * @author <a href="mailto:stefan.sik@omxgroup.com">Stefan Sik</a>
  *
  */
-public class ProjectHelper {
+public class ProjectHelper 
+{
 
 	public static IProject getProject(ContentNode node)
 	{
@@ -116,8 +118,37 @@ public class ProjectHelper {
 		    	fproject.installProjectFacet(pf.getDefaultVersion(),null, null);
 		    }
 		    */
+
+		    // Find best version
+		    IProjectFacetVersion webFacetVersion = null;
+		    try
+		    {
+		    	webFacetVersion = webFacet.getVersion("2.4");
+		    }
+		    catch (IllegalArgumentException iae)
+		    {
+		    	try
+			    {
+			    	webFacetVersion = webFacet.getVersion("2.3");
+			    }
+			    catch (IllegalArgumentException iae2)
+			    {
+			    	try
+				    {
+				    	webFacetVersion = webFacet.getVersion("2.2");
+				    }
+				    catch (IllegalArgumentException iae3)
+				    {
+				    	Logger.logConsole("No correct version of web facet found");
+				    }
+			    }
+		    }
+
 	    	fproject.installProjectFacet(javaFacet.getDefaultVersion(), null, null);
-	    	fproject.installProjectFacet(webFacet.getDefaultVersion(), null, null);
+	    	if (webFacetVersion != null)
+	    	{
+	    		fproject.installProjectFacet(webFacetVersion, null, null);
+	    	}
 	    	fproject.installProjectFacet(igFacet.getDefaultVersion(), null, null);
 			fproject.setFixedProjectFacets(facets);
 		}

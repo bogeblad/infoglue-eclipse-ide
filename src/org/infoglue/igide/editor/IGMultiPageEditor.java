@@ -23,14 +23,34 @@
 package org.infoglue.igide.editor;
 
 import java.io.PrintWriter;
+import java.io.StringReader;
 import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
+import org.dom4j.Document;
+import org.dom4j.DocumentHelper;
+import org.dom4j.Element;
+import org.dom4j.Node;
+import org.dom4j.XPath;
+import org.dom4j.io.SAXReader;
+import org.eclipse.core.internal.resources.File;
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IMarker;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IResourceChangeListener;
+import org.eclipse.core.resources.IResourceDelta;
+import org.eclipse.core.resources.IResourceDeltaVisitor;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -48,6 +68,7 @@ import org.eclipse.wst.sse.ui.StructuredTextEditor;
 import org.infoglue.cms.entities.content.ContentVersionVO;
 import org.infoglue.igide.cms.Content;
 import org.infoglue.igide.cms.ContentTypeAttribute;
+import org.infoglue.igide.cms.ContentTypeDefinition;
 import org.infoglue.igide.cms.ContentVersion;
 import org.infoglue.igide.cms.InfoglueCMS;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
@@ -56,10 +77,14 @@ import org.infoglue.igide.cms.exceptions.ConcurrentModificationException;
 import org.infoglue.igide.cms.exceptions.InvalidVersionException;
 import org.infoglue.igide.helper.Utils;
 import org.infoglue.igide.model.content.ContentNode;
+import org.infoglue.igide.preferences.PreferenceHelper;
 
 import org.infoglue.igide.cms.connection.NotificationMessage;
+import org.infoglue.igide.helper.DelayedFileWriter;
+import org.infoglue.igide.helper.Logger;
 import org.infoglue.igide.helper.NotificationListener;
 import org.infoglue.igide.helper.ProjectHelper;
+
 
 /**
  * 
@@ -98,6 +123,7 @@ public class IGMultiPageEditor extends MultiPageEditorPart implements
 
 
 	private boolean saving = false;
+    private boolean isReloadCMSPushCall;
 
 	public IGMultiPageEditor() {
 		super();
@@ -140,49 +166,86 @@ public class IGMultiPageEditor extends MultiPageEditorPart implements
 	
 	private IEditorPart getEditorForAttribute(ContentTypeAttribute attribute) throws CoreException
 	{
-		IEditorPart editor = null;
-		boolean enableComponentPropertiesEditor = false;
-		Integer stateId = getInfoglueEditorInput().getContent().getContentVersion().getStateId();
-		final boolean isWorkingState = (stateId == null || ContentVersionVO.WORKING_STATE.equals(getInfoglueEditorInput().getContent().getContentVersion().getStateId()));
-		
-		try 
-		{
-			enableComponentPropertiesEditor = Boolean.parseBoolean(attribute.getContentTypeAttribute("enableComponentPropertiesEditor").getContentTypeAttributeParameterValue().getValue("label"));
-		}
-		catch(Exception e) {}
-		
-		System.out.println("Getting editor for attribute: " + attribute.getName());
-		System.out.println("enableComponentPropertiesEditor=" + enableComponentPropertiesEditor);
-		System.out.println("-----------------------------------");
-		
-		editor = new StructuredTextEditor()
-		{
-			@Override
-			public boolean isDirty() {
-				// TODO Auto-generated method stub
-				return super.isDirty();
-			}
-			@Override
-			public void doSave(IProgressMonitor progressMonitor) {
-			
-				super.doSave(progressMonitor);
-				String document = getDocumentProvider().getDocument(getEditorInput()).get();
-				getAttributeEditorInput().getAttribute().setValue(document);
-				
-			}
-			
-			@Override
-			public boolean isEditable() 
-			{
-				return isWorkingState;
-			}
-			
-			private AttributeEditorInput getAttributeEditorInput() {
-				return (AttributeEditorInput) getEditorInput();
-			}
-			
-		};
-		 return editor;
+		final IGMultiPageEditor mpeditor = this;
+        IEditorPart editor = null;
+        boolean enableComponentPropertiesEditor = false;
+        ContentVersion cv = InfoglueCMS.getProjectContentVersion(getInfoglueEditorInput().getContent().getNode().getProject().getName(), getInfoglueEditorInput().getContent().getNode().getId());
+        Integer stateId = cv.getStateId();
+        final boolean isWorkingState = stateId == null || ContentVersionVO.WORKING_STATE.equals(stateId);
+        try
+        {
+            enableComponentPropertiesEditor = Boolean.parseBoolean(attribute.getContentTypeAttribute("enableComponentPropertiesEditor").getContentTypeAttributeParameterValue().getValue("label"));
+        }
+        catch(Exception exception) { }
+        Logger.logConsole((new StringBuilder("Getting editor for attribute: ")).append(attribute.getName()).toString());
+        Logger.logConsole((new StringBuilder("enableComponentPropertiesEditor=")).append(enableComponentPropertiesEditor).toString());
+        Logger.logConsole("-----------------------------------");
+        editor = new StructuredTextEditor() {
+
+            public synchronized void doSave(IProgressMonitor progressMonitor)
+            {
+                Logger.logConsole("*************************************");
+                Logger.logConsole("***   doSave in internal editor.  ***");
+                Logger.logConsole((new StringBuilder("***   ")).append(getAttributeEditorInput().getAttribute().getName()).append(" ***").toString());
+                Logger.logConsole("*************************************");
+                if(!mpeditor.saving)
+                    mpeditor.doSave(progressMonitor);
+                super.doSave(progressMonitor);
+                String document = getDocumentProvider().getDocument(getEditorInput()).get();
+                getAttributeEditorInput().getAttribute().setValue(document);
+//                ContentVersion existingCV = InfoglueCMS.getProjectContentVersion(getInfoglueEditorInput().getContent().getNode().getProject().getName(), getInfoglueEditorInput().getContent().getNode().getId());
+//                
+//                System.out.println("existingCV.value: " + existingCV.getValue());
+//                
+//                int start = existingCV.getValue().indexOf((new StringBuilder("<")).append(getAttributeEditorInput().getAttribute().getName()).append("><![CDATA[").toString());
+//                if(start > -1)
+//                {
+//                    int end = existingCV.getValue().indexOf((new StringBuilder("]]></")).append(getAttributeEditorInput().getAttribute().getName()).append(">").toString());
+//                    int length = (new StringBuilder("]]></")).append(getAttributeEditorInput().getAttribute().getName()).append(">").toString().length();
+//                    if(end > -1)
+//                    {
+//                        String newValue1 = (new StringBuilder(String.valueOf(existingCV.getValue().substring(0, start)))).append("<").append(getAttributeEditorInput().getAttribute().getName()).append("><![CDATA[").append(document).append("]]></").append(getAttributeEditorInput().getAttribute().getName()).append(">").append(existingCV.getValue().substring(end + length)).toString();
+//                        existingCV.setValue(newValue1);
+//                        getAttributeEditorInput().getAttribute().setValue(document);
+//                    }
+//                }
+//                else
+//                {
+////                	int check = existingCV.getValue().indexOf((new StringBuilder("<")).append(getAttributeEditorInput().getAttribute().getName()).toString());
+////                	if (check != -1)
+////                	{
+////                		Logger.logConsole("Found ");
+////                	}
+////                	else
+////                	{
+//	                    String newValue1 = existingCV.getValue().replaceFirst("</attributes>", (new StringBuilder("<")).append(getAttributeEditorInput().getAttribute().getName()).append("><![CDATA[").append(document).append("]]></").append(getAttributeEditorInput().getAttribute().getName()).append("></attributes>").toString());
+//	                    existingCV.setValue(newValue1);
+//	                    getAttributeEditorInput().getAttribute().setValue(document);
+////                	}
+//                }
+            }
+
+            public boolean isEditable()
+            {
+                return isWorkingState;
+            }
+
+            private AttributeEditorInput getAttributeEditorInput()
+            {
+                return (AttributeEditorInput)getEditorInput();
+            }
+
+            //final IGMultiPageEditor this$0;
+            //private final IGMultiPageEditor val$mpeditor;
+            //private final boolean val$isWorkingState;
+            //{
+            //   this$0 = IGMultiPageEditor.this;
+            //   mpeditor = igmultipageeditor1;
+            //   isWorkingState = flag;
+            //   super();
+            //}
+        };
+        return editor;
 	}
 	
 	public void createStructuredEditor(ContentTypeAttribute attribute) {
@@ -249,59 +312,174 @@ public class IGMultiPageEditor extends MultiPageEditorPart implements
 	 * <code>IWorkbenchPart</code> method disposes all nested editors.
 	 * Subclasses may extend.
 	 */
-	public void dispose() {
-		ResourcesPlugin.getWorkspace().removeResourceChangeListener(this);
+    public void dispose()
+    {
+        ResourcesPlugin.getWorkspace().removeResourceChangeListener(this);
+        getInfoglueEditorInput().getContent().getNode().getId();
+        Logger.logConsole("Removing " + getInfoglueEditorInput().getContent().getNode().getId());
+        InfoglueCMS.getOpenedFileNames().remove(getInfoglueEditorInput().getContent().getNode().getId());
+        Logger.logConsole((new StringBuilder("Removing fullPath:")).append(getInfoglueEditorInput().getContent().getNode().getFullPath().toString()).toString());
+        InfoglueCMS.getOpenedFullFileNames().remove(getInfoglueEditorInput().getContent().getNode().getFullPath().toString());
         getInfoglueEditorInput().getContent().getConnection().removeNotificationListener(this);
-		super.dispose();
-	}
+        super.dispose();
+    }
+
 
 	/**
 	 * Saves the multi-page editor's document.
 	 */
-	public void doSave(IProgressMonitor monitor) {
-		saving = true;
-		boolean dirtyflag = isDirty();
-		/*
-		 * Save all editors
-		 */
-		Utils.getMonitor(monitor).beginTask("Saving content to CMS",100);
-		
-		for (int i = 0; i < getPageCount(); i++) {
-			getEditor(i).doSave(monitor);
-		}
-		Utils.getMonitor(monitor).worked(25);
-		InfoglueEditorInput input = getInfoglueEditorInput();
-		input.getContent().doSave(monitor);
-		
-		try {
-			InfoglueCMS.saveContentVersion(input.getContent().getContentVersion(), input.getContent().getConnection(), monitor);
-		} 
-		catch (ConcurrentModificationException e) 
-		{
-        	MessageDialog.openInformation(this.getActiveEditor().getSite().getShell(), "Unhandled situation/Unable to save", "The content was updated on the server, the local version is not the latest and synchronization/update feature is still not implemented. Please close the editor and open it again to get the latest version");
-		}
-		catch (IllegalStateException e) 
-		{
-        	MessageDialog.openInformation(this.getActiveEditor().getSite().getShell(), "Unhandled situation/Unable to save", "The content is not in a working state, automatic working change is not yet implemented, sorry");
-		}
-		catch (InvalidVersionException e)
-		{
-        	MessageDialog.openInformation(this.getActiveEditor().getSite().getShell(), "Unhandled situation/Unable to save", "The content you are trying to save is not the active version at the server. Someone has create a new active version, sorry");
-		}
-		catch (Exception e) 
-		{
-			StringWriter sw = new StringWriter();
-			PrintWriter pw = new PrintWriter(sw);
-			e.printStackTrace(pw);
-			// TODO: display the stacktrace in the details.
-        	MessageDialog.openInformation(this.getActiveEditor().getSite().getShell(), "Unhandled situation/Unable to save", "We recieved the following from the server: " + e.getMessage() + "\n\n" + sw.toString());
-		}
-		
-		Utils.getMonitor(monitor).worked(100);
-		Utils.getMonitor(monitor).done();
-		
-		saving = false;
-	}
+    public void doSave(IProgressMonitor monitor)
+    {
+        Logger.logConsole("YES - doSave: " + monitor + ":" + isReloadCMSPushCall);
+        saving = true;
+        boolean dirtyflag = isDirty();
+        Utils.getMonitor(monitor).beginTask("Saving content to CMS", 100);
+
+        for(int i = 0; i < getPageCount(); i++)
+        {
+        	IEditorPart editor = getEditor(i);
+            editor.doSave(monitor);
+
+        }
+
+        Logger.logConsole("Saved each editor part...");
+        Utils.getMonitor(monitor).worked(25);
+        InfoglueEditorInput input = getInfoglueEditorInput();
+        Logger.logConsole("input: " + input);
+        input.getContent().doSave(monitor);
+        System.out.println("isReloadCMSPushCall: " + isReloadCMSPushCall);
+        if(!isReloadCMSPushCall)
+            try
+            {
+            	Logger.logConsole("saveLocalXML called");
+                ContentVersion cv = InfoglueCMS.getProjectContentVersion(input.getContent().getNode().getProject().getName(), input.getContent().getNode().getId());
+
+                SAXReader reader = new SAXReader();
+
+                Document document = reader.read(new StringReader(cv.getValue()));
+                Map<String, String> namespaceUris = new HashMap<String, String>();
+                namespaceUris.put("art", "x-schema:ArticleSchema.xml");
+
+                XPath xPath = DocumentHelper.createXPath("/art:article/art:attributes");
+                xPath.setNamespaceURIs(namespaceUris);
+
+                Element attributesNode = (Element) xPath.selectSingleNode(document); //(Element)document.selectSingleNode("/article/attributes");
+
+                @SuppressWarnings("unchecked")
+				List<Element> attributes = attributesNode.elements();//document.selectNodes("//attributes/*");
+
+                EditableInfoglueContent content = input.getContent();
+                final ArrayList<String> contentAttributes = content.getAttributesOrder();
+
+                Map<String, Element> attributeMap = new HashMap<String, Element>();
+
+                // This loop remove elements from the DOM element
+                for (Element attribute : attributes)
+                {
+                	// DOM4j will shorten empty attributes, which is not good for InfoGlue
+                	if ("".equals(attribute.getText()))
+        			{
+						attribute.clearContent();
+						attribute.addCDATA("");
+        			}
+
+                	if (attributeMap.containsKey(attribute.getName()))
+                	{
+                		Logger.logConsole("Found duplicate attribute. Removing it. Name: " + attribute.getName());
+                		attributesNode.remove(attribute);
+                	}
+                	else
+                	{
+                		String attributeName = attribute.getName();
+                		if (contentAttributes.contains(attributeName))
+                		{
+                			attributeMap.put(attributeName, attribute);
+                		}
+                		else if (!"IGAuthorFullName".equals(attributeName) && !"IGAuthorEmail".equals(attributeName))
+                		{
+                			Logger.logConsole("Found attribute in version that is not in the content type. Removing. Name: " + attributeName);
+                			attributesNode.remove(attribute);
+                		}
+                	}
+                }
+
+                // This loop add elements to the DOM element
+            	for(int i = 0; i < getPageCount(); i++)
+                {
+                	IEditorPart editor = getEditor(i);
+                    editor.doSave(monitor);
+                    IEditorInput editorInput = editor.getEditorInput();
+                    AttributeEditorInput attributeInput = null;
+                    if (editorInput instanceof AttributeEditorInput)
+                    {
+                    	attributeInput = (AttributeEditorInput)editorInput;
+                    	ContentTypeAttribute cta = attributeInput.getAttribute();
+                    	Element attributeNode = attributeMap.get(cta.getName());
+                    	if (attributeNode == null)
+                    	{
+                    		Logger.logConsole("Found no attribute for editor, name: " + cta.getName());
+                    		Element attributeElement = attributesNode.addElement(cta.getName());
+                    		attributeElement.clearContent();
+                    		attributeElement.addCDATA(cta.getValue());
+                    	}
+                    	else
+                    	{
+                    		System.out.println("Setting value: " + cta.getValue() + " on node: " + cta.getName());
+                    		attributeNode.clearContent();
+                    		attributeNode.addCDATA(cta.getValue());
+                    	}
+                    }
+                }
+
+            	// Sort the attributes
+            	attributes = (List<Element>)attributesNode.elements();
+            	Collections.sort(attributes, new Comparator<Element>()
+				{
+            		@Override
+            		public int compare(Element element1, Element element2)
+            		{
+            			int index1 = contentAttributes.indexOf(element1);
+            			int index2 = contentAttributes.indexOf(element2);
+
+            			if (index1 != -1 && index2 != -1)
+            			{
+            				return index1 - index2;
+            			}
+            			else if (index1 == -1 && index2 != -1)
+            			{
+            				return 1;
+            			}
+            			else if (index1 != -1 && index2 == -1)
+            			{
+            				return -1;
+            			}
+            			else
+            			{
+            				return 0;
+            			}
+            		}
+				});
+
+            	// Re-set the attributes after manipulation and sorting
+            	attributesNode.setContent(attributes);
+
+            	cv.setValue(document.asXML());
+            	
+
+                InfoglueCMS.saveLocalXML(input.getContent().getNode(), cv);
+                Logger.logConsole((new StringBuilder("Part in doSave:")).append(cv.getValue().substring(113, 200)).toString());
+            }
+            catch(Exception e)
+            {
+                Logger.logConsole("Error in saveLocal");
+                System.out.println("Exception: " + e.getMessage() + ", class: " + e.getClass());
+                e.printStackTrace();
+            }
+        Utils.getMonitor(monitor).worked(100);
+        Utils.getMonitor(monitor).done();
+        saving = false;
+    }
+
 
 	/**
 	 * Saves the multi-page editor's document as another file. Also updates the
@@ -331,6 +509,7 @@ public class IGMultiPageEditor extends MultiPageEditorPart implements
 	public void init(IEditorSite site, IEditorInput editorInput)
 			throws PartInitException {
 		// ((InfoglueEditorInput) editorInput).setEditor(this);
+
 		if (!(editorInput instanceof InfoglueEditorInput))
 			throw new PartInitException(
 					"Invalid Input: Must be InfoglueEditorInput");
@@ -366,128 +545,217 @@ public class IGMultiPageEditor extends MultiPageEditorPart implements
 		super.pageChange(newPageIndex);
 	}
 
-	/**
-	 * Closes all project files on project close.
-	 */
-	public void resourceChanged(final IResourceChangeEvent event) {
-		if (event.getType() == IResourceChangeEvent.PRE_CLOSE) {
-			Display.getDefault().asyncExec(new Runnable() {
-				public void run() {
-					/*
-					IWorkbenchPage[] pages = getSite().getWorkbenchWindow()
-							.getPages();
-					for (int i = 0; i < pages.length; i++) {
-						if (((FileEditorInput) editor.getEditorInput())
-								.getFile().getProject().equals(
-										event.getResource())) {
-							IEditorPart editorPart = pages[i].findEditor(editor
-									.getEditorInput());
-							pages[i].closeEditor(editorPart, true);
-						}
-					}
-					*/
-				}
-			});
-		}
-	}
+    public int getEditorPageCount()
+    {
+        return getPageCount();
+    }
+
+    public IEditorPart getEditorPart(int i)
+    {
+        return getEditor(i);
+    }
+
+    public void resourceChanged(IResourceChangeEvent r)
+    {
+        Logger.logConsole("**********************************");
+        IResourceDelta rootDelta = r.getDelta();
+        IResourceDelta docDelta = rootDelta;
+        if(docDelta == null)
+            return;
+        final List<IResource> changed = new ArrayList<IResource>();
+        IResourceDeltaVisitor visitor = new IResourceDeltaVisitor() {
+
+            public boolean visit(IResourceDelta delta)
+            {
+                IResource resource = delta.getResource();
+                if(delta.getKind() != 4)
+                    return true;
+                if((delta.getFlags() & 0x100) == 0)
+                    return true;
+                if(resource.getType() == 1 && "xml".equalsIgnoreCase(resource.getFileExtension()) && resource.getName().indexOf("_$") == -1)
+                {
+                	System.out.println("Name " + resource.getName());
+                    changed.add(resource);
+                }
+                return true;
+            }
+        };
+        try
+        {
+            docDelta.accept(visitor);
+        }
+        catch(CoreException e)
+        {
+            Logger.logConsole((new StringBuilder("CoreException:")).append(e.getMessage()).toString());
+        }
+        Logger.logConsole((new StringBuilder("Changed number of files:")).append(changed.size()).toString());
+        for(Iterator<IResource> changedIterator = changed.iterator(); changedIterator.hasNext();)
+        {
+            IResource resource = changedIterator.next();
+            IFile file = (IFile)resource;
+            Logger.logConsole((new StringBuilder("Resource:")).append(resource.getName()).toString());
+            InfoglueEditorInput editorInput = getInfoglueEditorInput();
+            if (editorInput == null)
+            {
+            	Logger.logConsole("No InfoglueEditorInput for this resource. Resource name: " + resource.getName());
+            	continue;
+            }
+            String editorInputName = getInfoglueEditorInput().getName();
+            String resourceName = resource.getName();
+            Logger.logConsole("EditorInputName:" + editorInputName + "=" + resourceName);
+            System.out.println("EditorInputName:" + editorInputName + "=" + resourceName);
+            int lastIndexUnderscore = resourceName.lastIndexOf("_");
+            String compareResourceName = resourceName;
+            if (lastIndexUnderscore == -1)
+            {
+            	Logger.logConsole("Something is wrong with the resource name. It should contain a underscore. Name: " + resourceName);
+            	int lastIndexExtension = resourceName.lastIndexOf(".xml");
+            	if (lastIndexExtension != -1)
+            	{
+            		compareResourceName = resourceName.substring(0, lastIndexExtension);
+            	}
+            }
+            else
+            {
+            	compareResourceName = resourceName.substring(0, lastIndexUnderscore);
+            }
+            if(compareResourceName.equals(editorInputName))
+            {
+                Logger.logConsole("As the editor contains the changed file we ??????");
+                Map attributeValueMap = InfoglueCMS.getAttributeValueMap(resource);
+                Logger.logConsole((new StringBuilder("AttributeValueMap was size:")).append(attributeValueMap.size()).append(" for XML-file on disk").toString());
+                Iterator attributeValueMapIterator = attributeValueMap.keySet().iterator();
+                Map fileValueMap = new HashMap();
+                while(attributeValueMapIterator.hasNext()) 
+                {
+                    String attributeName = (String)attributeValueMapIterator.next();
+                    String value = (String)attributeValueMap.get(attributeName);
+                    String attributeFileName = (new StringBuilder("_$")).append(resource.getName().replaceAll("_.*?xml", "")).append("_").append(attributeName).append(PreferenceHelper.getFileExtensionForAttributeKey(attributeName)).toString();
+                    if(attributeName.equals("Template"))
+                        attributeFileName = (new StringBuilder("_$")).append(resource.getName().replaceAll("_.*?xml", "")).append(".jsp").toString();
+                    if(attributeName.equals("PreTemplate"))
+                        attributeFileName = (new StringBuilder("_$")).append(resource.getName().replaceAll("_.*?xml", "")).append("_").append(attributeName).append(".jsp").toString();
+                    if(attributeName.equals("ComponentProperties"))
+                        attributeFileName = (new StringBuilder("_$")).append(resource.getName().replaceAll("_.*?xml", "")).append("_").append(attributeName).append(".xml").toString();
+                    Logger.logConsole((new StringBuilder("attributeFileName:")).append(attributeFileName).toString());
+                    IFile attributeFile = ((IFolder)file.getParent()).getFile(attributeFileName);
+                    Logger.logConsole((new StringBuilder("attributeFile:")).append(attributeFile).toString());
+                    if(attributeFile.exists())
+                    {
+                        Logger.logConsole((new StringBuilder("File found for:")).append(attributeFile).toString());
+                        fileValueMap.put(attributeFile, value);
+                    } else
+                    {
+                        Logger.logConsole((new StringBuilder("No file found... skipping writing to:")).append(attributeFile).toString());
+                    }
+                }
+                Logger.logConsole((new StringBuilder("Creating writer for:")).append(fileValueMap.size()).toString());
+                try
+                {
+                    DelayedFileWriter mywriter = new DelayedFileWriter(fileValueMap, getInfoglueEditorInput(), this, file);
+                    Logger.logConsole("Writing to file....");
+                    Display.getDefault().asyncExec(mywriter);
+                }
+                catch(Exception e)
+                {
+                    Logger.logConsole((new StringBuilder("Error creating writer: ")).append(e.getMessage()).toString());
+                }
+            } else
+            {
+                Logger.logConsole((new StringBuilder("The resource change does not affect this editor... skipping:")).append(editorInputName).append("!=").append(resourceName).toString());
+            }
+        }
+
+        Logger.logConsole("**********************************");
+        if(r.getType() == 2)
+            Display.getDefault().asyncExec(new Runnable() {
+
+                public void run()
+                {
+                }
+            });
+    }
 
 	private InfoglueProxy getProxy()
 	{
 		return getInfoglueEditorInput().getContent().getConnection().getInfoglueProxy();
 	}
 	
-	
-	public void doReload(ContentNode node, ContentVersion updated) throws Exception
-	{
-		if(updated.getMod().equals(getInfoglueEditorInput().getContent().getContentVersion().getMod()))
-		{
-			System.out.println("This version seem to be up to date.");
-			return;
-		}
-		
-        if(!isDirty() || MessageDialog.openQuestion(PlatformUI.getWorkbench().getDisplay().getActiveShell(), "CMS Message", "The content " + getInfoglueEditorInput().getContent().getName() + " was changed remotely by user: " + updated.getVersionModifier() + ". Do you want to reload the changed content?"))
+    public void doReload(ContentNode node, ContentVersion updated)
+        throws Exception
+    {
+        Logger.logConsole((new StringBuilder("doReload triggered with:")).append(node.getName()).toString());
+        ContentVersion cv = InfoglueCMS.getProjectContentVersion(node.getProject().getName(), node.getId());
+        if(updated.getMod().equals(cv.getMod()))
         {
-            // Only save the editors to remove dirty flag, not the editorinput (sent to cms)
-            // TODO: ??????
-    		for (int i = 0; i < getPageCount(); i++) {
-    			getEditor(i).doSave(null);
-    		}
-    		
-    		
+            Logger.logConsole("This version seem to be up to date - returning.");
+            return;
+        }
+        if(!isDirty() || MessageDialog.openQuestion(PlatformUI.getWorkbench().getDisplay().getActiveShell(), "CMS Message", (new StringBuilder("The content ")).append(getInfoglueEditorInput().getContent().getName()).append(" was changed remotely by user: ").append(updated.getVersionModifier()).append(". Do you want to reload the changed content?").toString()))
+        {
+            isReloadCMSPushCall = true;
+            Logger.logConsole("Saving each page in multi editor as a reload was called.");
+            for(int i = 0; i < getPageCount(); i++)
+            {
+                Logger.logConsole((new StringBuilder("Editor(i):")).append(getEditor(i).getClass().getName()).toString());
+                getEditor(i).doSave(null);
+                Logger.logConsole((new StringBuilder("Title for editor:")).append(getEditor(i).getTitle()).append(":").append(getEditor(i).getEditorInput().getName()).toString());
+            }
+
+            Logger.logConsole("Saving each page in multi editor as a reload was called.");
             IFolder tmp = ProjectHelper.getProject(node).getFolder("WebContent");
             setInput(InfoglueCMS.openContentVersion(node));
-            
-        }
-        else if(isDirty())
-        {
-        	MessageDialog.openInformation(this.getActiveEditor().getSite().getShell(), "Unhandled situation", "The content was updated on the server, the local version is not the latest and synchronization/update feature is still not implemented. Your changes might not get saved to CMS");
-        }
-
-		
-	}
+            isReloadCMSPushCall = false;
+            Logger.logConsole("Populated the multipage editor again with the content version.");
+        } else
+        if(isDirty())
+            MessageDialog.openInformation(getActiveEditor().getSite().getShell(), "Unhandled situation", "The content was updated on the server, the local version is not the latest and synchronization/update feature is still not implemented. Your changes might not get saved to CMS");
+    }
 	
     /*
      * @see org.infoglue.igide.helper.NotificationListener#recieveNotification(org.infoglue.igide.cms.NotificationMessage)
      */
     public void recieveCMSNotification(NotificationMessage message)
     {    	
-        ContentVersion version = getInfoglueEditorInput().getContent().getContentVersion();
         ContentNode node = getInfoglueEditorInput().getContent().getNode();
+        ContentVersion version = InfoglueCMS.getProjectContentVersion(node.getProject().getName(), node.getId());
         Integer activeVersion = version.getId();
-        
-        /*
-         * ContentVersion updates, someone has saved the same version.
-         */
         if(!saving && message.getClassName().indexOf("ContentVersionImpl") > -1)
-        {
-            try {
-                Integer objectId = new Integer((String) message.getObjectId());
+            try
+            {
+                Integer objectId = new Integer((String)message.getObjectId());
                 if(objectId.equals(activeVersion))
                 {
-                	synchronized(getInfoglueEditorInput().getContent().getContentVersion())
-                	{
-            			ContentVersion updated = getProxy().fetchContentVersionHead(version.getId());
-            			doReload(node, updated);
-                	}
+                    ContentVersion currentVersion = InfoglueCMS.getProjectContentVersion(node.getProject().getName(), node.getId());
+                    synchronized(currentVersion)
+                    {
+                        ContentVersion updated = getProxy().fetchContentVersionHead(version.getId());
+                        doReload(node, updated);
+                    }
                 }
             }
             catch(Exception e)
             {
-            	e.printStackTrace();
+                e.printStackTrace();
             }
-        }
-
-        
-        /*
-         * Content updates, some has changed the content. Maybe published??, or deleted version
-         * I think the reload responsibility maybe belong in class ViewContentProvider. Just make 
-         * a note in the log here for now...
-         */
         if(message.getClassName().indexOf("ContentImpl") > -1)
         {
-        	System.out.println("Editor: contentChange:" + message);
-            try {
-                Integer objectId = new Integer((String) message.getObjectId());
+            System.out.println((new StringBuilder("Editor: contentChange:")).append(message).toString());
+            try
+            {
+                Integer objectId = new Integer((String)message.getObjectId());
                 Integer oldState = node.getActiveVersionStateId();
-                
                 if(objectId.equals(node.getId()))
                 {
-                	System.out.println("Its this content");
-                	Content content = getProxy().fetchContent(node.getId());
-        			if(!content.getActiveVersion().equals(node.getActiveVersion()))
-        			{
-            			// ContentVersion updated = getProxy().fetchContentVersionHead(content.getActiveVersion());
-            			if(!oldState.equals(content.getActiveVersionStateId()))
-            			{
-            				System.out.println("This version is not active any more, the new version has state: " + content.getActiveVersionStateId() + " and it was modified by " + content.getActiveVersionModifier());
-            			}
-        			}
-                	
+                    System.out.println("Its this content");
+                    Content content = getProxy().fetchContent(node.getId());
+                    if(!content.getActiveVersion().equals(node.getActiveVersion()) && !oldState.equals(content.getActiveVersionStateId()))
+                        System.out.println((new StringBuilder("This version is not active any more, the new version has state: ")).append(content.getActiveVersionStateId()).append(" and it was modified by ").append(content.getActiveVersionModifier()).toString());
                 }
             }
             catch(Exception e)
             {
-            	e.printStackTrace();
+                e.printStackTrace();
             }
         }
          

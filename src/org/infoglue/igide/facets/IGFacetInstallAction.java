@@ -37,7 +37,8 @@ import org.infoglue.igide.helper.Utils;
  * @author <a href="mailto:stefan.sik@omxgroup.com">Stefan Sik</a>
  *
  */
-public class IGFacetInstallAction implements IDelegate {
+public class IGFacetInstallAction implements IDelegate
+{
 
 	public void execute(IProject arg0, IProjectFacetVersion arg1, Object arg2, IProgressMonitor arg3) throws CoreException 
 	{
