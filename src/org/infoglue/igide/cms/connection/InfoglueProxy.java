@@ -26,8 +26,10 @@
  */
 package org.infoglue.igide.cms.connection;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.StringBufferInputStream;
+import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
@@ -41,18 +43,31 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.dom4j.Document;
 import org.dom4j.DocumentException;
 import org.dom4j.Element;
 import org.dom4j.Node;
 import org.dom4j.io.SAXReader;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.jface.dialogs.ErrorDialog;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.dialogs.ProgressMonitorDialog;
+import org.eclipse.jface.operation.IRunnableWithProgress;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.handlers.HandlerUtil;
 import org.infoglue.deliver.util.CompressionHelper;
 import org.infoglue.igide.cms.Content;
 import org.infoglue.igide.cms.ContentTypeAttribute;
 import org.infoglue.igide.cms.ContentTypeDefinition;
 import org.infoglue.igide.cms.ContentVersion;
 import org.infoglue.igide.cms.InfoglueCMS;
+import org.infoglue.igide.cms.Repository;
 import org.infoglue.igide.cms.exceptions.ConcurrentModificationException;
 import org.infoglue.igide.cms.exceptions.InvalidLoginException;
 import org.infoglue.igide.cms.exceptions.InvalidVersionException;
@@ -63,6 +78,7 @@ import org.infoglue.igide.jobs.RefreshCMSApplicationSettings;
 import org.infoglue.igide.jobs.RefreshContentTypeDefinitions;
 import org.infoglue.igide.model.content.ContentNode;
 import org.infoglue.igide.model.content.ContentNodeFactory;
+import org.infoglue.igide.view.ContentExplorerView;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.core.util.Base64Encoder;
@@ -88,6 +104,7 @@ public class InfoglueProxy
     private Object applicationSettingsLock = new Object();
     private Map<String, String> applicationSettings = null;
     private Map<String, Collection<Method>> methodCache = new HashMap<String, Collection<Method>>();
+    Map templateLanguages = new HashMap();
 
     protected InfoglueProxy(final InfoglueConnection connection) throws InvalidLoginException, IOException, InvocationTargetException
     {
@@ -115,6 +132,7 @@ public class InfoglueProxy
 
     protected void init() throws Throwable
     {
+    	Logger.logConsole("init Proxy....");
     	new RefreshCMSApplicationSettings(connection).schedule();
     	new RefreshContentTypeDefinitions(connection).schedule();
 
@@ -124,12 +142,15 @@ public class InfoglueProxy
     	}
     }
     
-    public synchronized void refreshContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException
+    public synchronized void refreshContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException, Exception
     {
     	synchronized (contentTypeDefinitionsLock) {
 			contentTypeDefinitions = fetchContentTypeDefinitions();
-            Collections.sort(contentTypeDefinitions);
-            fillGlobalAttributeKeys();
+			if (contentTypeDefinitions != null)
+			{
+				Collections.sort(contentTypeDefinitions);
+				fillGlobalAttributeKeys();
+			}
         }
     }
 
@@ -216,33 +237,99 @@ public class InfoglueProxy
         return methods;
     }
     
-    public Collection<ContentTypeDefinition> getContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException
+    public Collection<ContentTypeDefinition> getContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException, Exception
     {
         if (contentTypeDefinitions == null)
         {
         	synchronized (contentTypeDefinitionsLock) {
                 contentTypeDefinitions = fetchContentTypeDefinitions();
-                Collections.sort(contentTypeDefinitions);
+                if (contentTypeDefinitions != null)
+                {
+                	Collections.sort(contentTypeDefinitions);
+                }
 			}
         }
         return contentTypeDefinitions;
     }
     
-    public List<ContentTypeDefinition> fetchContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException
+    List<ContentTypeDefinition> cachedContentTypeDefinitions = new ArrayList<ContentTypeDefinition>();
+    long lastUpdated = -1;
+    private AtomicBoolean runningContentTypeFetch = new AtomicBoolean(false);
+    
+    public List<ContentTypeDefinition> fetchContentTypeDefinitions() throws InvalidLoginException, IOException, DocumentException, Exception, IllegalStateException
     {
-    	try
+    	long diff = System.currentTimeMillis() - lastUpdated;
+    	if(cachedContentTypeDefinitions != null && cachedContentTypeDefinitions.size() > 0 && diff < (1000*60*1))
     	{
-            String xml = null;
-            Logger.logConsole("Getting content type definitions...");
-            xml = connection.getXML("", InfoglueConnection.CONTENTTYPEDEFSERVICEACTION);
-            //Logger.logConsole("DOC: " + xml);
-            contentTypeDefinitions = deserializeContentTypeDefinitions(xml);
-            Logger.logConsole("contentTypeDefinitions:" + contentTypeDefinitions.size());
+    		Logger.logConsole("Returning caches content types");
+    		return cachedContentTypeDefinitions;
     	}
-    	catch (Exception e) 
+    	else
     	{
-    		Logger.logConsole("Error fetching content types:" + e.getMessage());
-		}
+    		if (runningContentTypeFetch.compareAndSet(false, true))
+    		{
+    			try
+    			{
+			        try
+			        {
+				        ProgressMonitorDialog dialog = new ProgressMonitorDialog(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell());
+				        dialog.run(true, true, new IRunnableWithProgress()
+				        {
+				            public void run(IProgressMonitor monitor) { 
+				                monitor.beginTask("Retrieving content types and transaction history.", IProgressMonitor.UNKNOWN); 
+
+				                try 
+				                {
+				                    String xml = null;
+				                    Logger.logConsole("Getting content type definitions...");
+				                    xml = connection.getXML("", InfoglueConnection.CONTENTTYPEDEFSERVICEACTION);
+				                    if (!monitor.isCanceled())
+				                    {
+				                    	contentTypeDefinitions = deserializeContentTypeDefinitions(xml);
+				                    }
+				                    if (!monitor.isCanceled())
+				                    {
+					                    Logger.logConsole("contentTypeDefinitions:" + (contentTypeDefinitions == null ? "null" : contentTypeDefinitions.size()));
+					                    if (contentTypeDefinitions != null)
+					                    {
+						                    cachedContentTypeDefinitions = contentTypeDefinitions;
+						                    lastUpdated = System.currentTimeMillis();
+					                    }
+				                    }
+				        		}
+				                catch (Exception e) 
+				                {
+				                	Logger.logConsole("Error: " + e.getMessage());
+				           		}
+
+				                monitor.done(); 
+				            } 
+				        });
+			        }
+			        catch (Exception e) 
+			        {
+			        	if (e instanceof NullPointerException)
+			        	{
+			        		Logger.logConsole("Error getting content type definitions (NPE):" + e.getMessage(), e);
+			        	}
+			        	else
+			        	{
+			        		Logger.logConsole("Error getting content type definitions:" + e.getMessage() + ". Type: " + e.getClass());
+			        	}
+			        	throw e;
+			        	//ErrorDialog.openError(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), "Error",  "Error getting content type definitions:" + e.getMessage(), new Status(IStatus.ERROR, "ssss", 0, "Error getting content type definitions:" + e.getMessage(), e));
+					}
+			        if (contentTypeDefinitions == null)
+			        {
+			        	throw new IllegalStateException();
+			        }
+    			}
+    			finally
+    			{
+    				runningContentTypeFetch.set(false);
+    			}
+		    }
+    	}
         return contentTypeDefinitions;
     }
     
@@ -273,15 +360,18 @@ public class InfoglueProxy
     public ContentTypeDefinition getContentTypeDefinition(Integer id) throws Exception
     {
         Collection<ContentTypeDefinition> definitions = getContentTypeDefinitions();
-        for(Iterator<ContentTypeDefinition> i = definitions.iterator();i.hasNext();)
+        if (definitions != null)
         {
-            ContentTypeDefinition definition = i.next();
-            if(definition.getId().compareTo(id)==0)
-                return definition;
+	        for(Iterator<ContentTypeDefinition> i = definitions.iterator();i.hasNext();)
+	        {
+	            ContentTypeDefinition definition = i.next();
+	            if(definition.getId().compareTo(id)==0)
+	                return definition;
+	        }
         }
         return null;
     }
-	public ContentTypeDefinition getContentTypeDefinition(String string) throws InvalidLoginException, IOException, DocumentException 
+	public ContentTypeDefinition getContentTypeDefinition(String string) throws InvalidLoginException, IOException, DocumentException, Exception
 	{
         Collection<ContentTypeDefinition> definitions = getContentTypeDefinitions();
         for(Iterator<ContentTypeDefinition> i = definitions.iterator();i.hasNext();)
@@ -316,6 +406,25 @@ public class InfoglueProxy
         return version;
     }
     
+    public Integer fetchMasterLanguageId(Integer repositoryId) throws InvalidLoginException, IOException, DocumentException
+    {
+        String src = (new StringBuilder("?repositoryId=")).append(repositoryId).toString();
+        String result = connection.getXML(src, "SimpleContentXml!masterLanguage.action");
+        Logger.logConsole((new StringBuilder("result:")).append(result).toString());
+        return new Integer(result.trim());
+    }
+    
+    public Content fetchRootContent(Integer repositoryId)
+        throws InvalidLoginException, IOException, DocumentException
+    {
+        String xml = null;
+        String src = (new StringBuilder("?repositoryId=")).append(repositoryId).toString();
+        xml = connection.getXML(src, "SimpleContentXml!RootContent.action");
+        Logger.logConsole((new StringBuilder("xml:")).append(xml).toString());
+        Content content = deserializeContent(xml);
+        return content;
+    }
+    
     public Content fetchContent(Integer contentId) throws InvalidLoginException, IOException, DocumentException
     {
     	
@@ -340,6 +449,28 @@ public class InfoglueProxy
             e.printStackTrace();
         }
         return deserializeNodes(nodexml, node);
+    }
+    
+    public Map createRepository(Repository repository) throws Exception
+    {
+        System.out.println((new StringBuilder("in proxy.createRepository: repository=")).append(repository).toString());
+        Map data = new HashMap();
+        data.put("name", (new StringBuilder()).append(repository.getName()).toString());
+        data.put("description", (new StringBuilder()).append(repository.getDescription()).toString());
+        data.put("dnsName", (new StringBuilder()).append(repository.getDnsName()).toString());
+        data.put("languageName", "masterLanguage");
+        data.put("assignAutomaticRights", "true");
+        Logger.logConsole((new StringBuilder("Posting data:")).append(data).toString());
+        String returnData = connection.postData("", "CreateRepository!XML.action", data);
+        Logger.logConsole((new StringBuilder("returnData:")).append(returnData).toString());
+        String repositoryIdString = returnData.substring(returnData.indexOf("repositoryId>") + 13, returnData.indexOf("</repositoryId>"));
+        Logger.logConsole((new StringBuilder("repositoryIdString:")).append(repositoryIdString).toString());
+        String contentIdString = returnData.substring(returnData.indexOf("rootContentId>") + 14, returnData.indexOf("</rootContentId>"));
+        Logger.logConsole((new StringBuilder("contentIdString:")).append(contentIdString).toString());
+        Map result = new HashMap();
+        result.put("repositoryId", new Integer(repositoryIdString));
+        result.put("contentId", new Integer(contentIdString));
+        return result;
     }
     
     /*
@@ -383,9 +514,6 @@ public class InfoglueProxy
     
     public ContentVersion updateContentVersion(ContentVersion version) throws Exception 
     {
-    	/*
-    	 * TODO: discover and handle concurrent modification exception on the server side.
-    	 */
     	synchronized(version)
     	{
         	String returnData = null;
@@ -406,24 +534,34 @@ public class InfoglueProxy
                 data.put("oldModifiedDateTime", "" + version.getMod().getTime());
             }
             
+            String versionValue = version.getValue();
+	        try
+	        {
+	            SAXReader reader = new SAXReader();
+	            Document document = reader.read(new ByteArrayInputStream(versionValue.getBytes("UTF-8")));
+	            if(document == null)
+	                throw new Exception("Faulty dom... must be corrupt");
+	        }
+	        catch(Exception e)
+	        {
+	            Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(Display.getCurrent().getActiveShell(), "Error", "The content version was corrupt and saving it in infoglue would corrupt the data there as well. Please close eclipse and reopen the content and try again.");
+	                }
+	            });
+	        }
+	        
             data.put("contentId", "" + version.getContentId());
             data.put("languageId", "" + version.getLanguageId());
             data.put("versionValue", version.getValue());
-            
+            //Logger.logConsole((new StringBuilder("service:")).append(service).toString());
+			//Logger.logConsole("data:" + data);
+
             returnData = connection.postData("", service, data);
-            
-            System.out.println("***********************************************************************************");
-            System.out.println("[" + version.getValue() + "]");
-            System.out.println("***********************************************************************************");
-            System.out.println("***********************************************************************************");
-            System.out.println(returnData);
-            System.out.println("***********************************************************************************");
-            
-            /*
-             * TODO: TODO: TODO: FIX THIS, JUST A QUICK FIX TO MAKE IT WORK.
-             * DESERIALIZE THE DATA FROM CMS INSTEAD.
-             */
-            
+            Logger.logConsole(returnData);
+                        
             if(returnData.indexOf("<concurrentmodification/>")>-1)
         	{
             	throw new ConcurrentModificationException();
@@ -466,12 +604,15 @@ public class InfoglueProxy
              * what we need is the modification date set by the server.
              * we get that in the xml returndata, so parse it and use it. 
              */
-            try {
+            try 
+            {
     			updated = fetchContentVersionHead(version.getId());
-    			System.out.println("Setting new mod on this version: " + updated.getMod());
+    			Logger.logConsole("Setting new mod on this version: " + updated.getMod());
     			version.setMod(updated.getMod());
-    		} catch (Exception e) {
-    			e.printStackTrace();
+    		} 
+            catch (Exception e) 
+            {
+    			Logger.logConsole("Error setting mode on content version");
     		}
             return version;
     	}
@@ -532,7 +673,38 @@ public class InfoglueProxy
         }
         return ret;
     }
-    
+
+    public Integer getMasterLanguageId(Integer repositoryId) throws Exception
+    {
+        if(!templateLanguages.containsKey(repositoryId))
+        {
+        	try
+            {
+                Integer masterLanguageId = fetchMasterLanguageId(repositoryId);
+                templateLanguages.put(repositoryId, masterLanguageId);
+            }
+            catch(Exception e)
+            {
+                Logger.logConsole("Error getting master language for repository:" + e.getMessage(), e);
+            }
+        }
+        
+        if(templateLanguages.get(repositoryId) == null)
+        {
+            Display.getDefault().asyncExec(new Runnable() {
+
+                public void run()
+                {
+                    MessageDialog.openError(Display.getCurrent().getActiveShell(), "Error", "No master language available on this repository...");
+                }
+            });
+            throw new Exception("No master language available on this repository...");
+        } else
+        {
+            return (Integer)templateLanguages.get(repositoryId);
+        }
+    }
+        
     private Collection<ContentNode> deserializeNodes(String xml, ContentNode parentNode) throws DocumentException, Exception
     {
 	    Collection<ContentNode> result = new ArrayList<ContentNode>();
@@ -560,8 +732,24 @@ public class InfoglueProxy
             	activeVersionModifier 		= row.valueOf("@activeVersionModifier"); 
             } 
             catch(Exception e)
-            {e.printStackTrace();}
+            {
+            	e.printStackTrace();
+            }
 
+            if(activeVersion != null)
+            {
+               try
+                {
+                    ContentVersion cv = fetchContentVersionHead(activeVersion);
+                    if(cv != null && cv.getLanguageId() != null)
+                        templateLanguages.put(repositoryId, cv.getLanguageId());
+                }
+                catch(Exception e)
+                {
+                    Logger.logConsole((new StringBuilder("Error activeVersion:")).append(e.getMessage()).toString());
+                }
+			}
+			
             
             ContentNode node = ContentNodeFactory.createContentNode
             	(
@@ -646,8 +834,8 @@ public class InfoglueProxy
         }
         catch(Exception e)
 		{
-        	System.out.println("failed to set date: " + node.valueOf("@expiredatetime"));
-        	System.out.println("failed to set date: " + node.valueOf("@publishdatetime"));
+        	Logger.logConsole("failed to set date: " + node.valueOf("@expiredatetime"));
+        	Logger.logConsole("failed to set date: " + node.valueOf("@publishdatetime"));
 		}
         
         List list = document.selectNodes( "//content/versions/contentVersion");
@@ -714,7 +902,7 @@ public class InfoglueProxy
     {
         System.out.println("Creating notification message:" + data);
 		SAXReader reader = new SAXReader();
-        Document document = reader.read(new StringBufferInputStream(data));
+        Document document = reader.read(new StringReader(data));
         Node node = document.selectSingleNode("/org.infoglue.cms.util.NotificationMessage");
         NotificationMessage message = new NotificationMessage(
         		connection, 

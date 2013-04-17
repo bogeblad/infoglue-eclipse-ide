@@ -20,47 +20,39 @@
  *
  * ===============================================================================
  */
-package org.infoglue.igide.helper;
 
-import java.net.URL;
+package org.infoglue.igide.editor;
 
-import org.eclipse.jface.resource.ImageDescriptor;
-import org.eclipse.jface.resource.ImageRegistry;
+import java.util.Comparator;
 
-/**
- * 
- * @author <a href="mailto:stefan.sik@omxgroup.com">Stefan Sik</a>
- *
- */
-public class Icons
+public class HardcodedComparator implements Comparator
 {
-  private static ImageRegistry image_registry;
 
-  public static URL newURL(String url_name)
-  {
-    try
+    public HardcodedComparator(String namesInOrderString)
     {
-      return new URL(url_name);
+        this.namesInOrderString = namesInOrderString;
     }
-    catch (Exception e)
-    {
-        e.printStackTrace();
-      throw new RuntimeException("Malformed URL " + url_name, e);
-    }
-  }
 
-  public static ImageRegistry getImageRegistry()
-  {
-    if (image_registry == null)
+    public int compare(Object o1, Object o2)
     {
-      image_registry = new ImageRegistry();
-      image_registry.put(
-        "folder",
-        ImageDescriptor.createFromURL(newURL("file:/icons/sample.gif")));
-      image_registry.put(
-        "file",
-        ImageDescriptor.createFromURL(newURL("file:/icons/sample.gif")));
+        Comparable valueOne = (String)o1;
+        Comparable valueTwo = (String)o2;
+        return !after(valueOne, valueTwo) ? -1 : 1;
     }
-    return image_registry;
-  }
+
+    private boolean after(Comparable valueOne, Comparable valueTwo)
+    {
+        int index1 = namesInOrderString.indexOf(valueOne.toString());
+        int index2 = namesInOrderString.indexOf(valueTwo.toString());
+        if(index1 != -1 && index2 != -1)
+            return index1 > index2;
+        if(index1 == -1 && index2 != -1)
+            return true;
+        if(index2 == -1 && index1 != -1)
+            return false;
+        int result = valueOne.compareTo(valueTwo);
+        return result > 0;
+    }
+
+    private String namesInOrderString;
 }
