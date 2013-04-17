@@ -24,10 +24,7 @@
 package org.infoglue.igide.cms;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.io.StringBufferInputStream;
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -40,8 +37,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeMap;
 
 import org.dom4j.Attribute;
 import org.dom4j.Document;
@@ -165,7 +160,8 @@ public class InfoglueCMS
             openedFileNames.add(content.getNode().getId());
             Logger.logConsole((new StringBuilder("Adding fullPath")).append(content.getNode().getFullPath().toString()).toString());
             openedFullFileNames.add(content.getNode().getFullPath().toString());
-            content.setName(node.getText());
+            String nodeFileName = Utils.cleanFileName(node.getText());
+            content.setName(nodeFileName);
 
             input = new InfoglueEditorInput(content);
 
@@ -186,10 +182,10 @@ public class InfoglueCMS
                 attribute = (ContentTypeAttribute)attributes.get(key);
                 String value = getAttributeValue(contentVersion, attribute.getName());
                 attribute.setValue(value);
-                String assocKey = (new StringBuilder(String.valueOf(contentTypeDefinition.getName()))).append(".").append(attribute.getName()).toString();
-                String prefix = (new StringBuilder("_$")).append(node.getText()).append("_").append(attribute.getName()).toString();
+                String assocKey = contentTypeDefinition.getName() + "." + attribute.getName();
+                String prefix = "_$" + nodeFileName + "_" + attribute.getName();
                 String suffix = PreferenceHelper.getFileExtensionForAttributeKey(assocKey);
-                String filename = (new StringBuilder(String.valueOf(prefix))).append(suffix).toString();
+                String filename = prefix + suffix;
                 if(attribute.getInputType().equalsIgnoreCase("textarea"))
                 {
                     IFile file = parentFolder.getFile(filename);
@@ -397,7 +393,8 @@ public class InfoglueCMS
         else
             parentFolder = (IFolder)node.getLocalrecource();
         Logger.logConsole("version.getLanguageName():" + version.getLanguageName());
-        IFile file = parentFolder.getFile((new StringBuilder(String.valueOf(node.getText()))).append("_").append(version.getLanguageName()).append(".xml").toString());
+        String fileName = Utils.cleanFileName(node.getText());
+        IFile file = parentFolder.getFile(fileName + "_" + version.getLanguageName() + ".xml");
         byte bytes[] = version.getValue().getBytes("UTF-8");
 //        byte bytes[] = version.getValue().getBytes();
 //        System.out.println("###value UTF " + new String(bytes, "utf-8"));

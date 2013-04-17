@@ -106,7 +106,7 @@ public class ContentExplorerView extends ViewPart implements IPropertyChangeList
         try
         {
             MasterNode masterNode = (MasterNode)viewer.getInput();
-            Logger.logConsole((new StringBuilder("masterNode:")).append(masterNode.toString()).toString());
+            Logger.logConsole("masterNode:" + masterNode.toString());
             ContentNode rootContentNode = null;
             for(int i = 0; i < masterNode.getChildren().length; i++)
             {

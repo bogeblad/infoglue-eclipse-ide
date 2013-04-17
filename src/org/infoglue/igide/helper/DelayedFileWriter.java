@@ -4,11 +4,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
 import org.eclipse.core.resources.IFile;
-import org.eclipse.core.resources.IProject;
 import org.infoglue.igide.cms.ContentVersion;
 import org.infoglue.igide.cms.InfoglueCMS;
 import org.infoglue.igide.editor.*;
-import org.infoglue.igide.model.content.ContentNode;
 
 // Referenced classes of package org.infoglue.igide.helper:
 //            Logger, Utils

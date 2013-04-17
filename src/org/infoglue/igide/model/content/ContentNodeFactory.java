@@ -110,7 +110,8 @@ public class ContentNodeFactory {
 					if(primaryAttributeKeys.contains(thisKey))
 					{
 						Logger.logConsole(thisKey + " is a primary attribute key");
-						thisFile = parentFolder.getFile(text.trim() + PreferenceHelper.getFileExtensionForAttributeKey(thisKey));
+						String fileName = Utils.cleanFileName(text.trim());
+						thisFile = parentFolder.getFile(fileName + PreferenceHelper.getFileExtensionForAttributeKey(thisKey));
 						if(!thisFile.exists())
 						{
 						}

@@ -22,20 +22,17 @@
  */
 package org.infoglue.igide.helper;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 
+import org.apache.commons.io.IOUtils;
 import org.dom4j.Document;
 import org.dom4j.DocumentException;
 import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
 import org.eclipse.core.resources.IFile;
-import org.eclipse.core.internal.resources.File;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
@@ -326,42 +323,56 @@ public final class Utils
     
     public static String getIFileContentAsString(IResource resource)
     {
-        StringBuffer sb = new StringBuffer();
+//        StringBuffer sb = new StringBuffer();'
+    	String result = "";
         Logger.logConsole("resource: " + resource.getClass().getName());
         if(resource instanceof IFile)
         {
             IFile file = (IFile)resource;
-            Logger.logConsole("file:" + file.toString());
-            InputStreamReader isr = null;
+//            InputStreamReader isr = null;
             try
             {
+            	Logger.logConsole("file: " + file.toString() + ", encoding: " + file.getCharset());
                 InputStream is = file.getContents();
-                isr = new InputStreamReader(is);
-
-                int c;
-                while((c = isr.read()) != -1) 
-                    sb.append((char)c);
-                is.close();
+                
+                result = IOUtils.toString(is, file.getCharset());
+                
+//                isr = new InputStreamReader(is, file.getCharset());
+//
+//                int c;
+//                while((c = isr.read()) != -1)
+//                    sb.append((char)c);
+//                is.close();
             }
             catch(Exception e)
             {
                 Logger.logConsole("Error: " + e.getMessage() + ", type: " + e.getClass());
             }
-            finally
-            {
-            	if (isr != null)
-            	{
-            		try
-					{
-            			isr.close();
-					}
-					catch (IOException e)
-					{
-						Logger.logConsole("Failed to close input stream. Message: " + e.getMessage());
-					}
-            	}
-            }
+//            finally
+//            {
+//            	if (isr != null)
+//            	{
+//            		try
+//					{
+//            			isr.close();
+//					}
+//					catch (IOException e)
+//					{
+//						Logger.logConsole("Failed to close input stream. Message: " + e.getMessage());
+//					}
+//            	}
+//            }
         }
-        return sb.toString();
+
+        return result;
+    }
+    
+    public static String cleanFileName(String fileName)
+    {
+    	if (fileName == null)
+    	{
+    		return null;
+    	}
+    	return fileName.replaceAll("\\W+", "");
     }
 }
