@@ -27,12 +27,15 @@ package org.infoglue.igide.editor;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 
+import org.dom4j.Element;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.infoglue.igide.cms.ContentTypeAttribute;
 import org.infoglue.igide.cms.ContentVersion;
 import org.infoglue.igide.cms.InfoglueCMS;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
+import org.infoglue.igide.helper.Logger;
 import org.infoglue.igide.model.content.ContentNode;
 
 /**
@@ -44,12 +47,13 @@ import org.infoglue.igide.model.content.ContentNode;
  */
 public class EditableInfoglueContent {
 	
-	private ContentVersion contentVersion;
 	private String name;
 	private ContentNode node;
 	private String id;
 	private Collection attributes = new ArrayList();
 	private InfoglueConnection connection;
+	private ArrayList<String> attributesOrder = new ArrayList<String>();
+	//private Comparator<Element> attributesComparator;
 
     public int hashCode()
     {
@@ -75,15 +79,15 @@ public class EditableInfoglueContent {
 	
 	public void doSave(IProgressMonitor monitor)
 	{
-	    String versionValue = InfoglueCMS.buildVersionValue(attributes);
-	    this.contentVersion.setValue(versionValue);	    
+        Logger.logConsole((new StringBuilder("attributes:")).append(attributes).append(" in ").append(this).append(" on content:").append(id).toString());
 	}
 	
-	public EditableInfoglueContent(ContentNode node, String id, ContentVersion contentVersion, InfoglueConnection connection) {
+    public EditableInfoglueContent(ContentNode node, String id, InfoglueConnection connection)
+    {
+        attributes = new ArrayList();
 	    this.node = node;
 		this.id = id;
 		this.connection = connection;
-		this.contentVersion = contentVersion;
 	}
 	
 	public void addAttribute(ContentTypeAttribute a)
@@ -103,12 +107,7 @@ public class EditableInfoglueContent {
 	public String getId() {
 		return id;
 	}
-	public ContentVersion getContentVersion() {
-		return contentVersion;
-	}
-	public void setContentVersion(ContentVersion contentVersion) {
-		this.contentVersion = contentVersion;
-	}
+
     public InfoglueConnection getConnection()
     {
         return connection;
@@ -125,4 +124,14 @@ public class EditableInfoglueContent {
     {
         this.node = node;
     }
+
+    public ArrayList<String> getAttributesOrder()
+    {
+    	return this.attributesOrder;
+    }
+
+	public void setAttributesOrder(ArrayList<String> attributesOrder)
+	{
+		this.attributesOrder = attributesOrder;
+	}
 }

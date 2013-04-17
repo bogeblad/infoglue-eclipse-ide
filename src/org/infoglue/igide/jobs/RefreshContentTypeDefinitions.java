@@ -29,6 +29,9 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
 import org.infoglue.igide.cms.exceptions.InvalidLoginException;
 import org.infoglue.igide.helper.Logger;
@@ -55,27 +58,48 @@ public class RefreshContentTypeDefinitions extends Job {
 	}
 
 	@Override
-	protected IStatus run(IProgressMonitor p) {
+	protected IStatus run(IProgressMonitor p) 
+	{
 		Logger.logConsole("Refreshing contenttype definitions from " + connection.getBaseUrl().toString());
-		p.beginTask("Refreshing contenttype definitions from " + connection.getBaseUrl().toString(), 100);
-		try {
-			Logger.logConsole("Start refreshing...");
-			connection.getInfoglueProxy().refreshContentTypeDefinitions();
-		} catch (InvalidLoginException e) {
-			Logger.logConsole("Error refreshing:" + e.getMessage());
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			Logger.logConsole("Error refreshing:" + e.getMessage());
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (DocumentException e) {
-			Logger.logConsole("Error refreshing:" + e.getMessage());
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		Logger.logConsole("Done refreshing...");
-		
+		p.beginTask("Refreshing contenttype definitions from " + connection.getBaseUrl().toString(), IProgressMonitor.UNKNOWN);
+
+		Display.getDefault().syncExec(new Runnable()
+		{
+			@Override
+			public void run()
+			{
+				try 
+				{
+					Logger.logConsole("Start refreshing...");
+					connection.getInfoglueProxy().refreshContentTypeDefinitions();
+				}
+				catch(IllegalStateException e)
+				{
+					// PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell();
+					Logger.logConsole("Failed to refresh content types for " + connection.getBaseUrl());
+					Shell shell = Display.getCurrent().getActiveShell();
+					MessageDialog.openInformation(shell, "Retrieving content types and transaction history failed", "Retrieving content types and transaction history. This could be due to a slow query in InfoGlue.\nTry adding the following index to the database.\n\nRun: create index transactionObjectNameIndex ON cmTransactionHistory (transactionObjectId(255)) if it's slow");
+				}
+				catch (InvalidLoginException e) 
+				{
+					Logger.logConsole("Error refreshing:" + e.getMessage());
+				}
+				catch (IOException e) 
+				{
+					Logger.logConsole("Error refreshing:" + e.getMessage());
+				}
+				catch (DocumentException e) 
+				{
+					Logger.logConsole("Error refreshing:" + e.getMessage());
+				}
+				catch (Exception e) 
+				{
+					Logger.logConsole("Error refreshing:" + e.getMessage());
+				}
+				Logger.logConsole("Done refreshing...");
+			}
+		});
+
 		p.done();
 		return Status.OK_STATUS;
 	}

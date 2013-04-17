@@ -32,6 +32,13 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.security.AccessControlException;
+
+import org.apache.commons.httpclient.HttpClient;
+import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.viewers.TreeViewer;
+import org.eclipse.swt.widgets.Display;
+import org.infoglue.igide.helper.Logger;
 
 /**
  * @author Stefan Sik
@@ -39,16 +46,19 @@ import java.net.URLConnection;
  */
 public class HTTPTextDocumentListenerEngine implements Runnable
 {
-    private TextDocumentListener listener = null;
+    private TextDocumentListener listener;
     private URL url;
-    private Thread wThread = null;
+    private Thread wThread;
+    private HttpClient client;
+    private long lastRetry;
+    private TreeViewer viewer;
     
     public static void main(String[] args)
     {
         try
         {
             URL url = new URL("http://localhost:8080/infoglueCMS/SimpleContentXml!getChangeNotificationsStream.action?j_username=root&j_password=");
-            new HTTPTextDocumentListenerEngine(null, url).start();
+            (new HTTPTextDocumentListenerEngine(null, url, null, null)).start();
         }
         catch (MalformedURLException e)
         {
@@ -57,10 +67,15 @@ public class HTTPTextDocumentListenerEngine implements Runnable
         }
     }
     
-    public HTTPTextDocumentListenerEngine(TextDocumentListener listener, URL url)
+    public HTTPTextDocumentListenerEngine(TextDocumentListener listener, URL url, HttpClient client, TreeViewer viewer)
     {
+        this.listener = null;
+        wThread = null;
+        this.client = null;
+        lastRetry = System.currentTimeMillis();
         this.url = url;
         this.listener = listener;
+        this.viewer = viewer;
         wThread = new Thread(this);
     }
     
@@ -76,63 +91,237 @@ public class HTTPTextDocumentListenerEngine implements Runnable
     
     private void listen()
     {
-        String str = null;
-        try
-        {
-            URLConnection urlConn;
-            DataOutputStream printout;
-            DataInputStream input;
-            urlConn = url.openConnection();
-            urlConn.setDoInput(true);
-            urlConn.setDoOutput(true);
-            urlConn.setUseCaches(false);
-            String boundary = urlConn.getHeaderField("boundary");
-            System.out.println("In HTTPTextDocumentListenerEngine: boundary=" + boundary);
-            // urlConn.setRequestProperty("boundary", "~infoglue/multipart-boundary-164398655093-" + System.currentTimeMillis());
+    	String errorMessage;
+        boolean error;
+        errorMessage = "";
+        error = false;
+    	try
+    	{
+	        Logger.logConsole("Starting listen thread");
+	        URLConnection urlConn = url.openConnection();
+	        urlConn.setConnectTimeout(3000);
+	        urlConn.setRequestProperty("Connection", "Keep-Alive");
+	        urlConn.setReadTimeout(0);
+	        urlConn.setDoInput(true);
+	        urlConn.setDoOutput(true);
+	        urlConn.setUseCaches(false);
+	        urlConn.setAllowUserInteraction(false);
+	        if(urlConn.getHeaderFields().toString().indexOf("401 Unauthorized") > -1)
+	        {
+	            Logger.logConsole("User has no access to the CMS - closing connection");
+	            throw new AccessControlException("User has no access to the CMS - closing connection");
+	        }
+	        String boundary = urlConn.getHeaderField("boundary");
+	        DataInputStream input = new DataInputStream(urlConn.getInputStream());
+	        StringBuffer buf = new StringBuffer();
+	        if(listener != null)
+	            listener.onConnection(url);
+	        String str = null;
+	        while((str = input.readLine()) != null) 
+	        {
+	            if(str.indexOf("XMLNotificationWriter.ping") == -1)
+	            {
+	                if(str.equals(boundary))
+	                {
+	                	String message = buf.toString();
 
-            // Get response data.
-            input = new DataInputStream(urlConn.getInputStream());
-            StringBuffer buf = new StringBuffer();
+	                	// By checking there is more in the String than the XML declaration we assume the message is valid
+	                	if (message != null && !message.replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "").equals(""))
+	                	{
+		                    if(listener != null)
+		                        listener.recieveDocument(buf.toString());
+		                    else
+		                        Logger.logConsole((new StringBuilder("NEW DOCUMENT!!\r\n")).append(buf.toString()).append("\r\n").toString());
+	                	}
+	                    buf = new StringBuffer();
+	                } 
+	                else
+	                {
+	                    buf.append(str);
+	                }
+	            }
+	        }
+            input.close();
+    	}
+    	catch(MalformedURLException me)
+    	{
+	        error = true;
+	        errorMessage = (new StringBuilder("Faulty CMS-url:")).append(url).toString();
+	        if(listener != null)
+	            listener.onException(me);
+	        else
+	            System.err.println((new StringBuilder("MalformedURLException: ")).append(me).toString());
+	        final String errorMessageFinal = errorMessage;
+	        Logger.logConsole((new StringBuilder("The connection was shut. Was it an error:")).append(error).toString());
+	        if(!error)
+	        {
+	            if(System.currentTimeMillis() - lastRetry > 20000L)
+	            {
+	                Logger.logConsole("Trying to restart the listener as it was a while since last...");
+	                lastRetry = System.currentTimeMillis();
+	                listen();
+	            }
+	        } else
+	        {
+	            try
+	            {
+	                if(listener != null)
+	                    listener.onEndConnection(url);
+	            }
+	            catch(Exception e)
+	            {
+	                Logger.logConsole((new StringBuilder("Error ending connection:")).append(e.getMessage()).toString());
+	            }
+	            Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(viewer.getControl().getShell(), "Error", (new StringBuilder()).append(errorMessageFinal).toString());
+	                }
+	            });
+	        }
+    	}
+    	catch(IOException ioe)
+    	{
+            error = true;
+            errorMessage = "Got an I/O-Exception talking to the CMS. Check that it is started and in valid state.";
+            Logger.logConsole((new StringBuilder("ioe: ")).append(ioe.getMessage()).toString());
             if(listener != null)
-            	listener.onConnection(url);
-            
-            while (null != ((str = input.readLine())))
+                listener.onException(ioe);
+            else
+                Logger.logConsole((new StringBuilder("TextDocumentListener cannot connect to: ")).append(url.toExternalForm()).toString());
+            final String errorMessageFinal = errorMessage;
+            Logger.logConsole((new StringBuilder("The connection was shut. Was it an error:")).append(error).toString());
+            if(!error)
             {
-                if(str.equals(boundary))
+                if(System.currentTimeMillis() - lastRetry > 20000L)
+                {
+                    Logger.logConsole("Trying to restart the listener as it was a while since last...");
+                    lastRetry = System.currentTimeMillis();
+                    listen();
+                }
+            } else
+            {
+                try
                 {
                     if(listener != null)
-                        listener.recieveDocument(buf.toString());
-                    else
-                        System.out.println("NEW DOCUMENT!!\r\n" + buf.toString() + "\r\n");
-                    
-                    buf = new StringBuffer();
+                        listener.onEndConnection(url);
                 }
-                else
+                catch(Exception e)
                 {
-                    buf.append(str);
+                    Logger.logConsole((new StringBuilder("Error ending connection:")).append(e.getMessage()).toString());
                 }
+                Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(viewer.getControl().getShell(), "Error", (new StringBuilder()).append(errorMessageFinal).toString());
+	                }
+	            });
             }
-            input.close();
-        }
-        catch (MalformedURLException me)
+    	}
+        catch(AccessControlException ace)
         {
-        	if(listener != null) 
-        		listener.onException(me);
-        	else
-        		System.err.println("MalformedURLException: " + me);
+	        error = true;
+	        errorMessage = "The user you tried to connect with did not have the correct access rights. Check that he/she has roles etc enough to access the CMS";
+	        Logger.logConsole((new StringBuilder("ioe: ")).append(ace.getMessage()).toString());
+	        if(listener != null)
+	            listener.onException(ace);
+	        else
+	            Logger.logConsole((new StringBuilder()).append(ace.getMessage()).toString());
+	        final String errorMessageFinal = errorMessage;
+	        Logger.logConsole((new StringBuilder("The connection was shut. Was it an error:")).append(error).toString());
+	        if(!error)
+	        {
+	            if(System.currentTimeMillis() - lastRetry > 20000L)
+	            {
+	                Logger.logConsole("Trying to restart the listener as it was a while since last...");
+	                lastRetry = System.currentTimeMillis();
+	                listen();
+	            }
+	        } else
+	        {
+	            try
+	            {
+	                if(listener != null)
+	                    listener.onEndConnection(url);
+	            }
+	            catch(Exception e)
+	            {
+	                Logger.logConsole((new StringBuilder("Error ending connection:")).append(e.getMessage()).toString());
+	            }
+	            Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(viewer.getControl().getShell(), "Error", (new StringBuilder()).append(errorMessageFinal).toString());
+	                }
+	            });
+	        }
         }
-        catch (IOException ioe)
+        catch(Exception exception)
         {
-        	if(listener != null)
-        		listener.onException(ioe);
-        	else
-        		System.out.println("TextDocumentListener cannot connect to: " + url.toExternalForm());
+            final String errorMessageFinal = errorMessage;
+            Logger.logConsole((new StringBuilder("The connection was shut. Was it an error:")).append(error).toString());
+            if(!error)
+            {
+                if(System.currentTimeMillis() - lastRetry > 20000L)
+                {
+                    Logger.logConsole("Trying to restart the listener as it was a while since last...");
+                    lastRetry = System.currentTimeMillis();
+                    listen();
+                }
+            } else
+            {
+                try
+                {
+                    if(listener != null)
+                        listener.onEndConnection(url);
+                }
+                catch(Exception e)
+                {
+                    Logger.logConsole((new StringBuilder("Error ending connection:")).append(e.getMessage()).toString());
+                }
+                Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(viewer.getControl().getShell(), "Error", (new StringBuilder()).append(errorMessageFinal).toString());
+	                }
+	            });
+            }
         }
-        finally
-        {
-        	if(listener != null)
-        		listener.onEndConnection(url);
-        }
+        catch (Throwable e) {
+            final String errorMessageFinal = errorMessage;
+            Logger.logConsole((new StringBuilder("The connection was shut. Was it an error:")).append(error).toString());
+            if(!error)
+            {
+                if(System.currentTimeMillis() - lastRetry > 20000L)
+                {
+                    Logger.logConsole("Trying to restart the listener as it was a while since last...");
+                    lastRetry = System.currentTimeMillis();
+                    listen();
+                }
+            } else
+            {
+                try
+                {
+                    if(listener != null)
+                        listener.onEndConnection(url);
+                }
+                catch(Exception e2)
+                {
+                    Logger.logConsole((new StringBuilder("Error ending connection:")).append(e2.getMessage()).toString());
+                }
+                Display.getDefault().asyncExec(new Runnable() {
+	
+	                public void run()
+	                {
+	                    MessageDialog.openError(viewer.getControl().getShell(), "Error", (new StringBuilder()).append(errorMessageFinal).toString());
+	                }
+	            });
+            }
+		}
     }
 
 }

@@ -53,6 +53,7 @@ import org.eclipse.ui.part.EditorPart;
 import org.infoglue.igide.cms.ContentTypeAttribute;
 import org.infoglue.igide.cms.ContentTypeAttributeParameterValue;
 import org.infoglue.igide.cms.connection.InfoglueConnection;
+import org.infoglue.igide.helper.Logger;
 
 /**
  * @author Stefan Sik
@@ -110,21 +111,24 @@ public class InfoglueFormEditor extends EditorPart {
 	
 	public static void openBrowser(URL url)
 	{
-		IWorkbenchBrowserSupport support =
-			  PlatformUI.getWorkbench().getBrowserSupport();
-			IWebBrowser browser = null;
-			try {
-				browser = support.createBrowser("someId");
-			} catch (PartInitException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			}
-			try {
-				browser.openURL(url);
-			} catch (PartInitException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			}
+        IWorkbenchBrowserSupport support = PlatformUI.getWorkbench().getBrowserSupport();
+        IWebBrowser browser = null;
+        try
+        {
+            browser = support.createBrowser("someId");
+        }
+        catch(PartInitException e1)
+        {
+            e1.printStackTrace();
+        }
+        try
+        {
+            browser.openURL(url);
+        }
+        catch(PartInitException e1)
+        {
+            e1.printStackTrace();
+        }
 	}
 	
 	public void createPartControl(Composite parent) 
@@ -137,24 +141,10 @@ public class InfoglueFormEditor extends EditorPart {
 		toolkit = new FormToolkit(parent.getDisplay());
 		form = toolkit.createForm(parent);
 		toolkit.setBorderStyle(SWT.BORDER);
-		
-		form.setText(content.getName() + " (" + content.getContentVersion().getLanguageName() + ")");
-		
-		TableWrapLayout layout = new TableWrapLayout();
+		form.setText((new StringBuilder(String.valueOf(content.getName()))).append(" (TODO - set name)").toString());
+        TableWrapLayout layout = new TableWrapLayout();
 		form.getBody().setLayout(layout);
-
-		/*Hyperlink link = toolkit.createHyperlink(form.getBody(), "Click here.",	SWT.WRAP);
-		link.addHyperlinkListener(new HyperlinkAdapter() {
-			public void linkActivated(HyperlinkEvent e) {
-				System.out.println("Link activated!");
-			}
-		});
-		link.setText("This is an example of a form that is much longer and will need to wrap.");
-		*/
-		
 		layout.numColumns = 2;
-		
-		
 		Section section = toolkit.createSection(form.getBody(), Section.CLIENT_INDENT);
 		section.setText("General Properties");
 		TableWrapData td = new TableWrapData();
@@ -184,14 +174,15 @@ public class InfoglueFormEditor extends EditorPart {
 		link.addHyperlinkListener(new HyperlinkAdapter() {
 			@Override
 			public void linkActivated(org.eclipse.ui.forms.events.HyperlinkEvent e) {
-				try {
-					
-					String params = "?contentId=" + getInfoglueEditorInput().getContent().getContentVersion().getContentId() +
-									"&languageId=" + getInfoglueEditorInput().getContent().getContentVersion().getLanguageId() +
-									"&forceWorkingChange=true";
-					URL viewContentVersion = getInfoglueEditorInput().getContent().getConnection().getUrl(InfoglueConnection.VIEWCONTENTVERSIONSTANDALONE, params);
-					openBrowser(viewContentVersion);
-				} catch (MalformedURLException e1) {
+				try 
+				{
+				    Logger.logConsole("****************************** WTF IS THIS *********************");
+                    String params = "?contentId=300&languageId=1&forceWorkingChange=true";
+                    URL viewContentVersion = getInfoglueEditorInput().getContent().getConnection().getUrl("ViewContentVersion!standalone.action", params);
+                    InfoglueFormEditor.openBrowser(viewContentVersion);
+				} 
+				catch (MalformedURLException e1) 
+				{
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
@@ -202,17 +193,21 @@ public class InfoglueFormEditor extends EditorPart {
 
 		link = toolkit.createHyperlink(sectionClient2, "Preview site",
 				SWT.NONE);
-		link.addHyperlinkListener(new HyperlinkAdapter() {
+		link.addHyperlinkListener(new HyperlinkAdapter() 
+		{
 			@Override
-			public void linkActivated(org.eclipse.ui.forms.events.HyperlinkEvent e) {
-				String spec = "ViewPage.action?repositoryId=" + getInfoglueEditorInput().getContent().getNode().getRepositoryId();
-				URL context = getInfoglueEditorInput().getContent().getConnection().getDeliveryBaseUrl();
-				try {
-					openBrowser(new URL(context, spec));
-				} catch (MalformedURLException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
+			public void linkActivated(org.eclipse.ui.forms.events.HyperlinkEvent e) 
+			{
+                String spec = (new StringBuilder("ViewPage.action?repositoryId=")).append(getInfoglueEditorInput().getContent().getNode().getRepositoryId()).toString();
+                URL context = getInfoglueEditorInput().getContent().getConnection().getDeliveryBaseUrl();
+                try
+                {
+                    InfoglueFormEditor.openBrowser(new URL(context, spec));
+                }
+                catch(MalformedURLException e1)
+                {
+                    e1.printStackTrace();
+                }
 			}
 		});
 		

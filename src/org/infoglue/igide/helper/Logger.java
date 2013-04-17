@@ -26,13 +26,15 @@
  */
 package org.infoglue.igide.helper;
 
+import java.io.PrintWriter;
+
 import org.eclipse.ui.console.MessageConsole;
 import org.eclipse.ui.console.MessageConsoleStream;
 
 /**
  * @author Stefan Sik
  *
- */
+ */ 
 public class Logger {
 	private static final String CONSOLE_NAME = "Infoglue";
 	
@@ -51,4 +53,17 @@ public class Logger {
 			out.println(message);
 		}
 	}
+
+    public static synchronized void logConsole(String message, Throwable t)
+    {
+        MessageConsole myConsole = Utils.findConsole(CONSOLE_NAME);
+        synchronized(myConsole)
+        {
+            MessageConsoleStream out = myConsole.newMessageStream();
+            out.println(message);
+            t.printStackTrace(new PrintWriter(out));
+            t.printStackTrace();
+        }
+    }
+
 }

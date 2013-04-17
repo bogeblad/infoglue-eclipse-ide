@@ -27,6 +27,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.commons.io.IOUtils;
 import org.dom4j.Document;
 import org.dom4j.DocumentException;
 import org.dom4j.DocumentHelper;
@@ -236,6 +237,45 @@ public final class Utils
 		
 	}
 	
+	    /**
+     * @deprecated Method uglyParseRepositoryId is deprecated
+     */
+
+    public static Integer uglyParseRepositoryId(String returnData)
+    {
+        Integer value = null;
+        for(int tStart = returnData.indexOf("name=\"repositoryId\""); tStart > 0;)
+            if(returnData.charAt(tStart--) == '<')
+            {
+                returnData = returnData.substring(tStart + 1, returnData.indexOf(">", tStart + 1) + 1);
+                Document doc = null;
+                try
+                {
+                    doc = DocumentHelper.parseText(returnData);
+                }
+                catch(DocumentException documentexception) { }
+                if(doc == null)
+                    try
+                    {
+                        doc = DocumentHelper.parseText((new StringBuilder(String.valueOf(returnData))).append("</input>").toString());
+                    }
+                    catch(DocumentException documentexception1) { }
+                if(doc != null)
+                {
+                    Element r = doc.getRootElement();
+                    if(r.getName().equals("input") && r.valueOf("@name").equals("repositoryId"))
+                        try
+                        {
+                            value = new Integer(doc.getRootElement().valueOf("@value"));
+                        }
+                        catch(Exception exception) { }
+                }
+                break;
+            }
+
+        return value;
+    }
+	
 	/**
 	 * Make this method go away as soon as possible (I have tried to make it
 	 * as safe as possible, but its far from great.)
@@ -281,5 +321,58 @@ public final class Utils
 		return value;
 	}
     
+    public static String getIFileContentAsString(IResource resource)
+    {
+//        StringBuffer sb = new StringBuffer();'
+    	String result = "";
+        Logger.logConsole("resource: " + resource.getClass().getName());
+        if(resource instanceof IFile)
+        {
+            IFile file = (IFile)resource;
+//            InputStreamReader isr = null;
+            try
+            {
+            	Logger.logConsole("file: " + file.toString() + ", encoding: " + file.getCharset());
+                InputStream is = file.getContents();
+                
+                result = IOUtils.toString(is, file.getCharset());
+                
+//                isr = new InputStreamReader(is, file.getCharset());
+//
+//                int c;
+//                while((c = isr.read()) != -1)
+//                    sb.append((char)c);
+//                is.close();
+            }
+            catch(Exception e)
+            {
+                Logger.logConsole("Error: " + e.getMessage() + ", type: " + e.getClass());
+            }
+//            finally
+//            {
+//            	if (isr != null)
+//            	{
+//            		try
+//					{
+//            			isr.close();
+//					}
+//					catch (IOException e)
+//					{
+//						Logger.logConsole("Failed to close input stream. Message: " + e.getMessage());
+//					}
+//            	}
+//            }
+        }
 
+        return result;
+    }
+    
+    public static String cleanFileName(String fileName)
+    {
+    	if (fileName == null)
+    	{
+    		return null;
+    	}
+    	return fileName.replaceAll("\\W+", "");
+    }
 }

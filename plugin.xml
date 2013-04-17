@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?eclipse version="3.0"?>
+<?eclipse version="3.4"?>
 <plugin
    id="org.infoglue.igide.InfoglueConnectorPlugin"
    name="Infoglue Connector Plug-in"
-   version="1.0.0"
+   version="1.3.0"
    provider-name="Infoglue Community"
    class="org.infoglue.igide.InfoglueConnectorPlugin">
 
@@ -36,6 +36,8 @@
       <import plugin="org.eclipse.core.resources"/>
       <import plugin="org.eclipse.ui.ide"/>
       <import plugin="org.eclipse.ui.forms"/>
+      <import plugin="org.eclipse.team.core"/>
+      <import plugin="org.eclipse.team.ui"/>
    </requires>
 
    <extension
@@ -129,6 +131,11 @@
             </requires>
          </constraint>
       </project-facet-version>
+   </extension>
+   <extension
+         id="org.eclipse.team.ui.TeamSynchronizingPerspective"
+         name="%Synchronizing.perspective"
+         point="org.eclipse.ui.perspectives">
    </extension>
 
 </plugin>
