@@ -369,7 +369,7 @@ public class InfoglueCMS
 	    ContentVersion updated = null;
         Logger.logConsole("------------------------------- SAVING CONTENTVERSION!! -------------------------------");
 		Utils.getMonitor(monitor).subTask("Saving to CMS");
-
+		
 		updated = connection.getInfoglueProxy().updateContentVersion(version);
         try
         {
@@ -396,22 +396,21 @@ public class InfoglueCMS
         String fileName = Utils.cleanFileName(node.getText());
         IFile file = parentFolder.getFile(fileName + "_" + version.getLanguageName() + ".xml");
         byte bytes[] = version.getValue().getBytes("UTF-8");
-//        byte bytes[] = version.getValue().getBytes();
-//        System.out.println("###value UTF " + new String(bytes, "utf-8"));
-//        System.out.println("###value ISO " + new String(bytes, "iso-8859-1"));
+
         InputStream input = new ByteArrayInputStream(bytes);
         if(file.exists())
             file.setContents(input, 1, null);
         else
             file.create(input, 1, null);
+        
         Logger.logConsole("Writing value:" + version.getValue());
+        
         file.setCharset("UTF-8", Utils.getMonitor(null));
     }
 
     public static void updateLocalFile(IFile file, String value) throws Exception
     {
-        file.setContents(new StringBufferInputStream(value), 1, null);
-        file.setCharset("UTF-8", Utils.getMonitor(null));
+    	file.setContents(new ByteArrayInputStream(value.getBytes("UTF-8")), 1, null);
     }
 
     public static String buildVersionValue(Collection attributes)
